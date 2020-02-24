@@ -1,0 +1,42 @@
+cmake_minimum_required(VERSION 3.15)
+
+project(libgg C CXX)
+
+set(GGXXACPR_DIR "" CACHE PATH "")
+
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+    message(FATAL_ERROR "Only 32-bit build is supported")
+endif()
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Link static MSVCRT for all targets
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+add_compile_definitions(
+    BOOST_ALL_NO_LIB
+    BOOST_ERROR_CODE_HEADER_ONLY
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+)
+
+include_directories(include)
+
+add_library(libgg SHARED
+    src/libgg.cpp
+)
+
+enable_testing()
+
+add_executable(test_mini_reflection test/mini_reflection.cpp)
+#add_executable(test_memory_dump test/memory_dump.cpp)
+#add_executable(test_diff test/diff.cpp)
+#add_executable(test_binary_serializer test/binary_serializer.cpp)
+#add_executable(test_pretty_print test/pretty_print.cpp)
+
+add_test(NAME mini_reflection COMMAND test_mini_reflection)
+#add_test(NAME memory_dump COMMAND test_memory_dump)
+#add_test(NAME diff COMMAND test_diff)
+#add_test(NAME binary_serializer COMMAND test_binary_serializer)
+#add_test(NAME pretty_print COMMAND test_pretty_print)
