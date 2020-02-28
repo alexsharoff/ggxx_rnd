@@ -27,6 +27,8 @@ add_library(libgg SHARED
     src/libgg.cpp
 )
 
+add_subdirectory(src/steam_api_nop)
+
 enable_testing()
 
 add_executable(test_mini_reflection test/mini_reflection.cpp)

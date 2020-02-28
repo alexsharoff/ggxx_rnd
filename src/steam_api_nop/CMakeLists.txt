@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.12)
 
 project(steam_api_nop)
 
-add_compile_options($<IF:$<CONFIG:Debug>,/MTd,/MT>)
-
 add_library(steam_api SHARED
 	SteamAPI.cpp
 	SteamFriends005.cpp
@@ -19,3 +17,6 @@ add_library(steam_api SHARED
 target_include_directories(steam_api PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/include
 )
+#target_compile_definitions(steam_api
+#	STEAM_API_DBGPRINT
+#)
