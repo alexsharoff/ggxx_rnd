@@ -325,6 +325,29 @@ struct reflect<projectiles>
 	);
 };
 
+struct directx_obj
+{
+	ptr_chain<data_size<0x20>, 0, 0> vtable1;
+	ptr_chain<data_size<0x20>, 0, 0> vtable2;
+	directx_obj* ptr1;
+	directx_obj* ptr2;
+	uint32_t idx1;
+	uint32_t idx2;
+};
+
+template<>
+struct reflect<directx_obj>
+{
+	constexpr static auto members = member_tuple(
+		&directx_obj::vtable1,
+		&directx_obj::vtable2,
+		&directx_obj::ptr1,
+		&directx_obj::ptr2,
+		&directx_obj::idx1,
+		&directx_obj::idx2
+	);
+};
+
 struct match_state
 {
 	memory_offset<uint8_t, 0x50f7ec> p1_rounds_won;
@@ -378,12 +401,20 @@ struct match_state
 	memory_offset<uint8_t[0x2800], 0x5489F8> a20;
 	memory_offset<uint8_t[0x2800], 0x54B198> a21;
 	memory_offset<uint8_t[0x54], 0x506690> a22;
-	memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x50669C> a23;
-	memory_offset<uint8_t*, 0x5066A0> memory_begin;
+	memory_offset<uint32_t, 0x506698> a23;
+	// directx stuff: CMipMaps, effects etc.
+	// When restoring this, we're probably leaking a ton of memory!
+	memory_offset<ptr_chain<data_size<0x11970>, 0, 0>, 0x50669C> a24;
+
+	memory_offset<ptr_chain<memory_offset<directx_obj[0xbb9], 0x10>, 0, 0>, 0x50669C> a24_vtables;
+	// not sure if needed
 	memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A4> a25;
+	// not sure if needed
 	memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A8> a26;
-	//memory_offset<data_size<0x400>, 0x5481E3> palette_p1;
-	//memory_offset<data_size<0x400>, 0x5485E3> palette_p2;
+	memory_offset<data_size<0x5499A0 - 0x5489F8>, 0x5489F8> a27;
+	memory_offset<data_size<0x54C980 - 0x54B210>, 0x54B210> a28;
+	memory_offset<data_size<0x5476E8 - 0x521268>, 0x521268> a29;
+	memory_offset<uint8_t*, 0x5066A0> memory_begin;
 };
 
 static_assert(sizeof(player_controller_state) == 152);
@@ -441,11 +472,15 @@ struct reflect<match_state>
 		&match_state::a21,
 		&match_state::a22,
 		&match_state::a23,
-		&match_state::memory_begin,
+		&match_state::a24,
+		&match_state::a24_vtables,
 		&match_state::a25,
-		&match_state::a26/*,
-		&match_state::palette_p1,
-		&match_state::palette_p2*/
+		&match_state::a26,
+		&match_state::a27,
+		&match_state::a28,
+		&match_state::a29,
+		
+		&match_state::memory_begin
 	);
 };
 
@@ -531,7 +566,7 @@ struct gg_state
 		0x556020> play_sound;
 	// TODO: how to populate it automatically?
 	decltype(write_cockpit_font_internal)* write_cockpit_font = nullptr;
-	memory_offset<IDirect3DDevice9*, 0x555B94> direct3d9;
+	memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
 	memory_offset<extra_config, 0x51B180> extra_config[2];
 	// TODO: at least 14! Double check
 	memory_offset<menu_fiber[14], 0x54f030> menu_fibers;
@@ -696,6 +731,7 @@ size_t g_record_idx = 0;
 uint16_t g_speed_control_counter = 0;
 std::optional<history_t> g_prev_state;
 history_t g_cur_state;
+bool g_out_of_memory = false;
 
 // rec player = rec / stop recording
 // rec enemy = stop world
@@ -769,8 +805,17 @@ void __cdecl get_raw_input_data(input_data* out)
 				}
 				else
 				{
-					if (input.keys[i] == (input.keys[i] & std::get<4>(*g_prev_state).keys[i]))
-						input.keys[i] = std::get<4>(*g_prev_state).keys[i];
+					const uint16_t non_directional_buttons = ~reverse_bytes(
+						cfg.up.bit | cfg.down.bit | cfg.left.bit | cfg.right.bit
+					);
+					const auto& prev_keys = std::get<4>(*g_prev_state).keys[i];
+					const bool record_history_rewind = g_recording && g_record_idx + 1 < g_history.size();
+					const bool prev_has_non_directional_buttons = prev_keys & non_directional_buttons;
+					const bool is_subset = (input.keys[i] & prev_keys) == input.keys[i] && (g_prev_bitmask[i] & ~training_mode_buttons) != 0;
+					if ((record_history_rewind && input.keys[i] == 0) || (input.keys[i] == 0 || is_subset) && !(g_speed && prev_has_non_directional_buttons))
+					{
+						input.keys[i] = prev_keys;
+					}
 				}
 			}
 
@@ -794,6 +839,7 @@ void __cdecl get_raw_input_data(input_data* out)
 			{
 				g_manual_frame_advance = !g_manual_frame_advance;
 				g_speed = g_manual_frame_advance ? 0 : 1;
+				g_out_of_memory = false;
 			}
 
 			if (bitmask & cfg.enemy_jump.bit)
@@ -879,9 +925,8 @@ void __cdecl get_raw_input_data(input_data* out)
 
 				if (g_speed < 0)
 				{
-					--g_playback_idx;
-					if (g_playback_idx == -1)
-						g_playback_idx = 0;
+					if (g_playback_idx > 0)
+						--g_playback_idx;
 				}
 				else if (g_speed > 0)
 				{
@@ -899,23 +944,31 @@ void __cdecl get_raw_input_data(input_data* out)
 
 		if (g_recording && g_record_idx < 900)
 		{
-			if (g_record_idx >= g_history.size())
-				g_history.resize(g_record_idx + 1);
-			g_history[g_record_idx] = g_cur_state;
-
-			if (g_speed < 0)
+			try
 			{
-				--g_record_idx;
-				if (g_record_idx == 0)
-					g_record_idx = 0;
-			}
-			else if (g_speed > 0)
-			{
-				++g_record_idx;
-			}
+				if (g_record_idx >= g_history.size())
+					g_history.resize(g_record_idx + 1);
+				g_history[g_record_idx] = g_cur_state;
 
-			if (g_record_idx < g_history.size())
-				g_cur_state = g_history[g_record_idx];
+				if (g_speed < 0)
+				{
+					if (g_record_idx > 0)
+						--g_record_idx;
+				}
+				else if (g_speed > 0)
+				{
+					++g_record_idx;
+				}
+
+				if (g_record_idx < g_history.size())
+					g_cur_state = g_history[g_record_idx];
+			}
+			catch(const std::bad_alloc&)
+			{
+				g_out_of_memory = true;
+				g_recording = false;
+				g_record_idx = 0;
+			}
 		}
 		else
 		{
@@ -1106,6 +1159,10 @@ void process_objects()
 	{
 		auto str = "SPEED " + std::to_string(g_speed);
 		write_cockpit_font(str.c_str(), 285, 150, 1, 0xFF, 1);
+	}
+	if (g_out_of_memory)
+	{
+		write_cockpit_font("OUT OF MEMORY!", 50, 150, 1, 0xff, 1);
 	}
 }
 

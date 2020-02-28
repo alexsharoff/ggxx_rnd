@@ -84,8 +84,18 @@ struct sizeof_noalign<self<rel_mem_ptr<T>>>
 template<class T, offset_t Offset>
 struct memory_offset
 {
-    template<class... Args>
+    template<class U = T, std::enable_if_t<!std::is_array_v<U>>* = nullptr, class... Args>
     memory_offset(Args&&... args) : data(std::forward<Args>(args)...) {}
+
+    template<class U = T, std::enable_if_t<std::is_array_v<U>>* = nullptr, class V, size_t N>
+    memory_offset(const V (&other)[N])
+    {
+        for (size_t i = 0; i < N; ++i)
+            data[i] = other[i];
+    }
+
+    template<class U = T, std::enable_if_t<std::is_array_v<U>>* = nullptr>
+    memory_offset() {}
 
     const T& get() const
     {
