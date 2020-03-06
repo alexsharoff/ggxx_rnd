@@ -6,6 +6,7 @@
 //#include "binary_serializer.h"
 #include "memory_dump.h"
 
+#include <Dbghelp.h>
 #include <Windows.h>
 #include <objbase.h>
 
@@ -29,6 +30,54 @@ using memory_dump::rel_mem_ptr;
 using memory_dump::memory_offset;
 using memory_dump::local_memory_accessor;
 using memory_dump::offset_value;
+
+
+void* PatchIAT(HMODULE module, void* oldSymbol, void* newSymbol)
+{
+	ULONG size = 0;
+	unsigned char* baseAddress = (unsigned char*)module;
+	void* originalSymbol = NULL;
+
+	IMAGE_IMPORT_DESCRIPTOR* importDescriptor = (IMAGE_IMPORT_DESCRIPTOR*)::ImageDirectoryEntryToData(
+		baseAddress, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &size);
+	if (importDescriptor == NULL)
+	{
+		//Patching module has no IDT.
+		return NULL;
+	}
+
+	while (importDescriptor->FirstThunk != 0)
+	{
+		IMAGE_THUNK_DATA* thunk = (IMAGE_THUNK_DATA*)(baseAddress + importDescriptor->FirstThunk);
+		while (thunk->u1.Function != 0)
+		{
+			if (thunk->u1.Function != (DWORD_PTR)oldSymbol) 
+			{
+				thunk++;
+				continue;
+			}
+
+			originalSymbol = (LPVOID)thunk->u1.Function;
+			DWORD protect;
+			::VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), PAGE_EXECUTE_READWRITE, &protect);
+			thunk->u1.Function = (DWORD_PTR)newSymbol;
+			::VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), protect, &protect);
+		}
+		importDescriptor++;
+	}
+
+	return originalSymbol;
+}
+
+template<class F>
+F* PatchIAT(LPCSTR symbolModule, LPCSTR symbolName, LPCSTR iatModuleName, F* replacement)
+{
+	void* import = ::GetProcAddress(::GetModuleHandleA(symbolModule), symbolName);
+	if (import == NULL)
+		return NULL;
+
+	return (F*)PatchIAT(::GetModuleHandleA(iatModuleName), import, replacement);
+}
 
 struct input_data
 {
@@ -314,7 +363,7 @@ struct reflect<active_object_state>
 
 struct projectiles
 {
-	active_object_state objects[98];
+	active_object_state objects[0x80];
 };
 
 template<>
@@ -367,54 +416,64 @@ struct match_state
 	memory_offset<bool, 0x51B8FC> p2_ex_enabled;
 	// There are actually 4 controllers, but 3-4 are copies of 2
 	memory_offset<controller_state[2], 0x51EDC8> controller_state;
-	// TODO: double check array length
-	memory_offset<active_object_state*, 0x519E5C> extra_object_ptr1;
-	memory_offset<active_object_state*, 0x519E60> extra_object_ptr2;
-	//memory_offset<active_object_state*, 0x519E60> extra_objects2;
+	memory_offset<uint8_t[0x24], 0x519E50> extra_objects_meta;
+	// TODO: optimize by capturing only objects in use
+	// active_object_state[0x‭17F‬]
+	memory_offset<ptr_chain<data_size<0x130 * 0x17F>, 0, 0>, 0x519E50> extra_objects;
 	memory_offset<ptr_chain<active_object_state, 0, 0>, 0x516778> p1_character;
 	memory_offset<ptr_chain<active_object_state, 0, 0>, 0x51A07C> p2_character;
 	memory_offset<ptr_chain<projectiles, 0, 0>, 0x51677C> projectiles;
 
-	memory_offset<uint8_t[0x18B78], 0x4FDC00> training_mode_history;
+	// TODO: shorten / split this monstrosity
+	memory_offset<uint8_t[0x7E7D], 0x4FDC00> training_mode_history;
 
 	memory_offset<uint32_t, 0x555FEC> pause_state;
 
-	memory_offset<uint32_t, 0x3E37FC> a1;
-	memory_offset<uint32_t, 0x4F80E4> a2;
-	memory_offset<uint32_t, 0x50F800> a3;
-	memory_offset<uint32_t, 0x5113B4> a4;
-	memory_offset<active_object_state, 0x517BA8> a5;
-	memory_offset<uint32_t, 0x51B798> a6;
-	memory_offset<uint32_t, 0x51B7A4> a7;
-	memory_offset<uint32_t, 0x51B914> a8;
-	memory_offset<uint32_t, 0x51B9DC> a9;
-	memory_offset<uint32_t, 0x51EDD4> a10;
-	memory_offset<uint32_t, 0x51EE6C> a11;
-	memory_offset<uint32_t, 0x51EF04> a12;
-	memory_offset<uint32_t, 0x51EF9C> a13;
-	memory_offset<uint32_t, 0x555D28> a14;
-	memory_offset<uint32_t, 0x555FEC> a15;
-	memory_offset<uint32_t, 0x555FF4> a16;
-	memory_offset<uint32_t, 0x55602C> a17;
-	memory_offset<uint32_t, 0x5561A8> a18;
-	memory_offset<active_object_state, 0x517A78> a19;
-	memory_offset<uint8_t[0x2800], 0x5489F8> a20;
-	memory_offset<uint8_t[0x2800], 0x54B198> a21;
-	memory_offset<uint8_t[0x54], 0x506690> a22;
-	memory_offset<uint32_t, 0x506698> a23;
-	// directx stuff: CMipMaps, effects etc.
-	// When restoring this, we're probably leaking a ton of memory!
-	memory_offset<ptr_chain<data_size<0x11970>, 0, 0>, 0x50669C> a24;
-
-	memory_offset<ptr_chain<memory_offset<directx_obj[0xbb9], 0x10>, 0, 0>, 0x50669C> a24_vtables;
-	// not sure if needed
-	memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A4> a25;
-	// not sure if needed
-	memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A8> a26;
-	memory_offset<data_size<0x5499A0 - 0x5489F8>, 0x5489F8> a27;
-	memory_offset<data_size<0x54C980 - 0x54B210>, 0x54B210> a28;
-	memory_offset<data_size<0x5476E8 - 0x521268>, 0x521268> a29;
-	memory_offset<uint8_t*, 0x5066A0> memory_begin;
+	// TODO: try to shorten / remove some of this stuff
+	memory_offset<uint8_t, 0x505A7D> graphics1;
+	memory_offset<uint32_t, 0x506558> graphics2;
+	memory_offset<uint32_t, 0x506588> graphics3;
+	memory_offset<uint32_t, 0x506690> graphics4;
+	memory_offset<uint32_t, 0x506694> graphics5;
+	memory_offset<uint32_t, 0x506698> graphics6;
+	memory_offset<uint32_t, 0x5066B0> graphics7;
+	memory_offset<uint32_t, 0x5066B4> graphics8;
+	memory_offset<uint8_t[0x8FA8], 0x521268> graphics9;
+	memory_offset<uint32_t, 0x5476E8> graphics10;
+	memory_offset<ptr_chain<data_size<0x19D78>, 0, 0>, 0x5480F0> graphics11;
+	memory_offset<uint32_t, 0x548104> graphics12;
+	memory_offset<uint32_t, 0x5489E0> graphics13;
+	memory_offset<uint32_t, 0x5489F0> graphics14;
+	memory_offset<uint32_t, 0x5489F8> graphics15;
+	memory_offset<uint32_t, 0x55607C> graphics16;
+	memory_offset<uint32_t, 0x55609C> graphics17;
+	memory_offset<uint32_t, 0x5560A0> graphics18;
+	memory_offset<uint8_t[0x1348], 0x548A00> graphics19;
+	memory_offset<uint8_t[0x1CFC], 0x54B200> graphics20;
+	
+	// TODO: remove as much as possible of these 'unknown' values in the future
+	memory_offset<uint32_t, 0x3E37FC> unknown1;
+	memory_offset<uint32_t, 0x4F80E4> unknown2;
+	memory_offset<uint32_t, 0x5113B4> unknown3;
+	memory_offset<active_object_state, 0x517BA8> unknown4;
+	memory_offset<uint32_t, 0x51B798> unknown5;
+	memory_offset<uint32_t, 0x51B7A4> unknown6;
+	memory_offset<uint32_t, 0x51B914> unknown7;
+	memory_offset<uint32_t, 0x51B9DC> unknown8;
+	memory_offset<uint32_t, 0x51EDD4> unknown9;
+	memory_offset<uint32_t, 0x51EE6C> unknown10;
+	memory_offset<uint32_t, 0x51EF04> unknown11;
+	memory_offset<uint32_t, 0x51EF9C> unknown12;
+	memory_offset<uint32_t, 0x555D28> unknown13;
+	memory_offset<uint32_t, 0x55602C> unknown14;
+	memory_offset<uint32_t, 0x5561A8> unknown15;
+	memory_offset<active_object_state, 0x517A78> unknown16;
+	memory_offset<uint8_t[0x2800], 0x5489F8> unknown17;
+	memory_offset<uint8_t[0x2800], 0x54B198> unknown18;
+	memory_offset<uint8_t[0x54], 0x506690> unknown19;
+	memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A4> unknown20;
+	memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A8> unknown21;
+	memory_offset<active_object_state, 0x5163E0> unknown22;
 };
 
 static_assert(sizeof(player_controller_state) == 152);
@@ -438,49 +497,57 @@ struct reflect<match_state>
 		&match_state::p1_ex_enabled,
 		&match_state::p2_ex_enabled,
 		&match_state::controller_state,
-		/*&match_state::p1_character,
-		&match_state::p2_character,
-		&match_state::projectiles,
-		&match_state::projectile_ptrs,*/
-		&match_state::extra_object_ptr1,
-		&match_state::extra_object_ptr2,
+		&match_state::extra_objects_meta,
+		&match_state::extra_objects,
 		&match_state::p1_character,
 		&match_state::p2_character,
 		&match_state::projectiles,
 		&match_state::training_mode_history,
 		&match_state::pause_state,
-		&match_state::a1,
-		&match_state::a2,
-		&match_state::a3,
-		&match_state::a4,
-		&match_state::a5,
-		&match_state::a6,
-		&match_state::a7,
-		&match_state::a8,
-		&match_state::a9,
-		&match_state::a10,
-		&match_state::a11,
-		&match_state::a12,
-		&match_state::a13,
-		&match_state::a14,
-		&match_state::a15,
-		&match_state::a16,
-		&match_state::a17,
-		&match_state::a18,
-		&match_state::a19,
-		&match_state::a20,
-		&match_state::a21,
-		&match_state::a22,
-		&match_state::a23,
-		&match_state::a24,
-		&match_state::a24_vtables,
-		&match_state::a25,
-		&match_state::a26,
-		&match_state::a27,
-		&match_state::a28,
-		&match_state::a29,
-		
-		&match_state::memory_begin
+
+		&match_state::graphics1,
+		&match_state::graphics2,
+		&match_state::graphics3,
+		&match_state::graphics4,
+		&match_state::graphics5,
+		&match_state::graphics6,
+		&match_state::graphics7,
+		&match_state::graphics8,
+		&match_state::graphics9,
+		&match_state::graphics10,
+		&match_state::graphics11,
+		&match_state::graphics12,
+		&match_state::graphics13,
+		&match_state::graphics14,
+		&match_state::graphics15,
+		&match_state::graphics16,
+		&match_state::graphics17,
+		&match_state::graphics18,
+		&match_state::graphics19,
+		&match_state::graphics20,
+
+		&match_state::unknown1,
+		&match_state::unknown2,
+		&match_state::unknown3,
+		&match_state::unknown4,
+		&match_state::unknown5,
+		&match_state::unknown6,
+		&match_state::unknown7,
+		&match_state::unknown8,
+		&match_state::unknown9,
+		&match_state::unknown10,
+		&match_state::unknown11,
+		&match_state::unknown12,
+		&match_state::unknown13,
+		&match_state::unknown14,
+		&match_state::unknown15,
+		&match_state::unknown16,
+		&match_state::unknown17,
+		/*&match_state::unknown18,
+		&match_state::unknown19,
+		&match_state::unknown20,
+		&match_state::unknown21,*/
+		&match_state::unknown22
 	);
 };
 
@@ -572,7 +639,6 @@ struct gg_state
 	memory_offset<menu_fiber[14], 0x54f030> menu_fibers;
 	memory_offset<mersenne_twister, 0x565F20> rng;
 	memory_offset<uint32_t, 0x51B8CC> game_mode;
-	//memory_offset<std::array<uint8_t, 0x3614>, 0x516514> crapola;
 	memory_offset<uint8_t*, 0x54EE14> memory_begin;
 	memory_offset<uint8_t*, 0x54B208> memory_end;
 	memory_offset<game_config, 0x5134D8> config;
@@ -660,6 +726,46 @@ void EnablePauseMenu(bool enable)
 	}
 }
 
+namespace memory_hook
+{
+
+HLOCAL WINAPI LocalFree(HLOCAL hMem);
+HLOCAL WINAPI LocalAlloc(UINT uFlags, SIZE_T uBytes);
+
+decltype(LocalFree)* g_local_free_impl = nullptr;
+decltype(LocalAlloc)* g_local_alloc_impl = nullptr;
+bool g_capture = false;
+
+struct alloc_info
+{
+	HLOCAL hMem;
+	bool free;
+};
+std::vector<alloc_info> g_allocations;
+
+HLOCAL WINAPI LocalFree(HLOCAL hMem)
+{
+	if (g_capture)
+	{
+		g_allocations.push_back({hMem, true});
+		return NULL;
+	}
+	else
+	{
+		return g_local_free_impl(hMem);
+	}
+}
+
+HLOCAL WINAPI LocalAlloc(UINT uFlags, SIZE_T uBytes)
+{
+	HLOCAL res = g_local_alloc_impl(uFlags, uBytes);
+	if (g_capture)
+		g_allocations.push_back({res, false});
+	return res;
+}
+
+}
+
 extern "C" __declspec(dllexport) void libgg_init()
 {
 	static bool s_is_ready = false;
@@ -679,6 +785,13 @@ extern "C" __declspec(dllexport) void libgg_init()
 		if (g_state.play_sound.get().ptr)
 			g_state.play_sound.get().ptr = play_sound;
 		dump(g_state, g_image_base);
+
+		memory_hook::g_local_free_impl = PatchIAT(
+			"kernel32.dll", "LocalFree", "d3d9.dll", memory_hook::LocalFree
+		);
+		memory_hook::g_local_alloc_impl = PatchIAT(
+			"kernel32.dll", "LocalAlloc", "d3d9.dll", memory_hook::LocalAlloc
+		);
 	}
 }
 
@@ -709,10 +822,27 @@ void queue_destroy_fibers()
 	dump(g_state.menu_fibers, g_image_base);
 }
 
+void free_orphaned_allocations(const std::vector<memory_hook::alloc_info>& items)
+{
+	for (const auto i: items)
+	{
+		if (!i.free)
+			::LocalFree(i.hMem);
+	}
+}
+
+void free_memory_delayed(const std::vector<memory_hook::alloc_info>& items)
+{
+	for (const auto i: items)
+	{
+		if (i.free)
+			::LocalFree(i.hMem);
+	}
+}
+
 using history_t = std::tuple<
 	match_state,
 	decltype(g_state.rng),
-	std::vector<uint8_t>,
 	std::vector<uint8_t>,
 	input_data
 >;
@@ -754,6 +884,8 @@ void __cdecl get_raw_input_data(input_data* out)
 
 	if (in_match() && !std::get<0>(g_cur_state).pause_state.get())
 	{
+		//memory_hook::g_capture = true;
+
 		if (g_speed <= 0)
 		{
 			g_cur_state = *g_prev_state;
@@ -761,10 +893,11 @@ void __cdecl get_raw_input_data(input_data* out)
 			const auto& rng = std::get<1>(g_cur_state);
 			const auto& data1 = std::get<2>(g_cur_state);
 			std::copy(data1.begin(), data1.end(), g_state.memory_begin.get());
-			const auto& data2 = std::get<3>(g_cur_state);
-			std::copy(data2.begin(), data2.end(), ms.memory_begin.get());
 			dump(ms, g_image_base);
 			dump(rng, g_image_base);
+
+			//free_orphaned_allocations(memory_hook::g_allocations);
+			//memory_hook::g_allocations.clear();
 		}
 		else
 		{
@@ -772,11 +905,9 @@ void __cdecl get_raw_input_data(input_data* out)
 			std::get<2>(g_cur_state).clear();
 			std::copy(g_state.memory_begin.get(), g_state.memory_end.get(),
 						std::back_inserter(std::get<2>(g_cur_state)));
-			std::get<3>(g_cur_state).clear();
-			const auto& cur_ms = std::get<0>(g_cur_state);
-			std::copy(cur_ms.memory_begin.get(), cur_ms.memory_begin.get() + 0xC8FE0,
-						std::back_inserter(std::get<3>(g_cur_state)));
 		}
+		//free_memory_delayed(memory_hook::g_allocations);
+		//memory_hook::g_allocations.clear();
 
 		bool speed_control_enabled = false;
 		const auto& controller_configs = g_state.config.get().player_controller_config;
@@ -808,7 +939,7 @@ void __cdecl get_raw_input_data(input_data* out)
 					const uint16_t non_directional_buttons = ~reverse_bytes(
 						cfg.up.bit | cfg.down.bit | cfg.left.bit | cfg.right.bit
 					);
-					const auto& prev_keys = std::get<4>(*g_prev_state).keys[i];
+					const auto& prev_keys = std::get<3>(*g_prev_state).keys[i];
 					const bool record_history_rewind = g_recording && g_record_idx + 1 < g_history.size();
 					const bool prev_has_non_directional_buttons = prev_keys & non_directional_buttons;
 					const bool is_subset = (input.keys[i] & prev_keys) == input.keys[i] && (g_prev_bitmask[i] & ~training_mode_buttons) != 0;
@@ -906,22 +1037,23 @@ void __cdecl get_raw_input_data(input_data* out)
 		EnableDrawing(drawing_enabled);
 		g_enable_fps_limit = fps_limit_enabled;
 
-		std::get<4>(g_cur_state) = input;
+		std::get<3>(g_cur_state) = input;
 
 		if (g_playing)
 		{
 			if (g_playback_idx < g_history.size())
 			{
 				g_cur_state = g_history[g_playback_idx];
-				const auto& ms = std::get<0>(g_cur_state);
-				const auto& rng = std::get<1>(g_cur_state);
-				const auto& data1 = std::get<2>(g_cur_state);
-				const auto& data2 = std::get<3>(g_cur_state);
-				input = std::get<4>(g_cur_state);
-				std::copy(data1.begin(), data1.end(), g_state.memory_begin.get());
-				std::copy(data2.begin(), data2.end(), ms.memory_begin.get());
-				dump(ms, g_image_base);
-				dump(rng, g_image_base);
+				input = std::get<3>(g_cur_state);
+				if (g_playback_idx == 0)
+				{
+					const auto& ms = std::get<0>(g_cur_state);
+					const auto& rng = std::get<1>(g_cur_state);
+					const auto& data1 = std::get<2>(g_cur_state);
+					std::copy(data1.begin(), data1.end(), g_state.memory_begin.get());
+					dump(ms, g_image_base);
+					dump(rng, g_image_base);
+				}
 
 				if (g_speed < 0)
 				{
@@ -975,7 +1107,6 @@ void __cdecl get_raw_input_data(input_data* out)
 			g_recording = false;
 		}
 
-
 		g_prev_state = g_cur_state;
 	}
 	else
@@ -986,6 +1117,8 @@ void __cdecl get_raw_input_data(input_data* out)
 		g_speed = 1;
 		g_manual_frame_advance = false;
 		g_speed_control_counter = 0;
+		memory_hook::g_capture = false;
+		memory_hook::g_allocations.clear();
 	}
 
 	EnableRoundEndCondition(!g_recording);

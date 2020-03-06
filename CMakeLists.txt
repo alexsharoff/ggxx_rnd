@@ -26,6 +26,7 @@ include_directories(include)
 add_library(libgg SHARED
     src/libgg.cpp
 )
+target_link_libraries(libgg dbghelp)
 
 add_subdirectory(src/steam_api_nop)
 
