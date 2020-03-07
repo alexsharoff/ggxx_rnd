@@ -431,6 +431,8 @@ struct match_state
 
 	memory_offset<uint32_t, 0x555FEC> pause_state;
 
+	memory_offset<uint8_t[0x90], 0x50AA0C> extra_rng_state;
+
 	// TODO: try to shorten / remove some of this stuff
 	memory_offset<uint8_t, 0x505A7D> graphics1;
 	memory_offset<uint32_t, 0x506558> graphics2;
@@ -506,6 +508,7 @@ struct reflect<match_state>
 		&match_state::projectiles,
 		&match_state::training_mode_history,
 		&match_state::pause_state,
+		&match_state::extra_rng_state,
 
 		&match_state::graphics1,
 		&match_state::graphics2,
