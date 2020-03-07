@@ -13,6 +13,7 @@
 #include <D3D9.h>
 
 #include <array>
+#include <charconv>
 #include <deque>
 #include <iostream>
 #include <string>
@@ -136,13 +137,20 @@ struct menu_fiber
 
 static_assert(sizeof(menu_fiber) == 0x38);
 
+#pragma pack(push, 1)
 struct gg_char_state
 {
 	// common state + char-specific stuff (via union)
 	// Doesn't contain any pointers
 	// TODO: elaborate later
-	char data[0x148];
+	char data1[0x7c];
+	uint16_t stun_accumulator; // 7c
+	uint16_t faint_countdown; // 7e
+	char data2[0xc8];
 };
+#pragma pack(pop)
+
+static_assert(sizeof(gg_char_state) == 0x148);
 
 struct player_button_timers
 {
@@ -643,6 +651,15 @@ struct gg_state
 	// TODO: at least 14! Double check
 	memory_offset<menu_fiber[14], 0x54f030> menu_fibers;
 	memory_offset<mersenne_twister, 0x565F20> rng;
+	/*
+	vs 2p: 0x803
+	training: 0x101
+	vp cpu: 0x2001
+	vs 2p team: 0x40803
+	vs cpu team: 0x42001
+	arcade/mom: 1
+	survival 0x201
+	*/
 	memory_offset<uint32_t, 0x51B8CC> game_mode;
 	memory_offset<uint8_t*, 0x54EE14> memory_begin;
 	memory_offset<uint8_t*, 0x54B208> memory_end;
@@ -867,6 +884,11 @@ uint16_t g_speed_control_counter = 0;
 std::optional<history_t> g_prev_state;
 history_t g_cur_state;
 bool g_out_of_memory = false;
+struct extra_training_display
+{
+	uint16_t stun_accumulator;
+	uint16_t faint_countdown;
+} g_extra_training_display;
 
 // set palette reset bit
 // current palette may be incorrect after rollback
@@ -1129,6 +1151,14 @@ void __cdecl get_raw_input_data(input_data* out)
 			g_recording = false;
 		}
 
+		if (g_state.game_mode == 0x101)
+		{
+			// in training
+			const auto& p2_char_state = std::get<0>(g_cur_state).character_state.get()[1];
+			g_extra_training_display.stun_accumulator = p2_char_state.stun_accumulator;
+			g_extra_training_display.faint_countdown = p2_char_state.faint_countdown;
+		}
+
 		g_prev_state = g_cur_state;
 	}
 	else
@@ -1298,6 +1328,32 @@ void process_input()
 	f();
 }
 
+template<size_t N, std::enable_if_t<(N > 1)>* = nullptr>
+std::errc format_int(char (&buffer)[N], int value, int pad = 3)
+{
+	auto [p, ec] = std::to_chars(buffer, buffer + N - 1, value);
+	if (ec != std::errc())
+		return ec;
+	const size_t len = p - buffer;
+	if (len < pad)
+	{
+		const size_t diff = pad - len;
+		buffer[pad] = 0;
+		for (int i = pad - 1; i >= 0; --i)
+		{
+			if (i < diff)
+				buffer[i] = ' ';
+			else
+				buffer[i] = buffer[i - diff];
+		}
+	}
+	else
+	{
+		*p = 0;
+	}
+	return std::errc();
+}
+
 void process_objects()
 {
 	const auto f = *g_state_orig.process_objects.get().get();
@@ -1321,6 +1377,41 @@ void process_objects()
 	if (g_out_of_memory)
 	{
 		write_cockpit_font("OUT OF MEMORY!", 50, 150, 1, 0xff, 1);
+	}
+	if (in_match() && g_state.game_mode == 0x101 && !std::get<0>(g_cur_state).pause_state.get())
+	{
+		// TODO: don't display extra HUD if DISPLAY option is NONE or INPUT
+		const int increment_y = 0x18;
+		const int key_x = 0x16a;
+		const int value_x = 0x21a;
+		const float key_f = 265;
+		const float value_f = 266;
+		int y = 0xb8;
+		{
+			y += increment_y;
+			write_cockpit_font("        STUN", key_x, y, key_f, 0xff, 1);
+			if (g_extra_training_display.stun_accumulator != 0xffff)
+			{
+				char str[6];
+				format_int(str, g_extra_training_display.stun_accumulator);
+				write_cockpit_font(str, value_x, y, value_f, 0xff, 1);
+			}
+			else
+			{
+				write_cockpit_font("FAINT", value_x, y, value_f, 0xff, 1);
+			}
+
+			if (g_extra_training_display.faint_countdown)
+			{
+				y += increment_y;
+				write_cockpit_font("       FAINT", key_x, y, key_f, 0xff, 1);
+				{
+					char str[6];
+					format_int(str, g_extra_training_display.faint_countdown);
+					write_cockpit_font(str, value_x, y, value_f, 0xff, 1);
+				}
+			}
+		}
 	}
 }
 
