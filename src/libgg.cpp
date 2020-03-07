@@ -278,7 +278,8 @@ struct active_object_state
 	//data_5c* data_5c2; // 8C
 	void* hit_block_callback; // 90
 	palette_reset_func_t* reset_palette_callback; // 94
-	uint8_t unknown10[0x18]; // 98
+	uint8_t unknown10[0x14]; // 98
+	uint32_t palette_status_bitmask; // ac
 	int32_t pos_x; // b0
 	int32_t pos_y; // b4
 	int32_t velocity_x; // b8
@@ -341,6 +342,7 @@ struct reflect<active_object_state>
 		&active_object_state::hit_block_callback,
 		&active_object_state::reset_palette_callback,
 		&active_object_state::unknown10,
+		&active_object_state::palette_status_bitmask,
 		&active_object_state::pos_x,
 		&active_object_state::pos_y,
 		&active_object_state::velocity_x,
@@ -863,6 +865,20 @@ std::optional<history_t> g_prev_state;
 history_t g_cur_state;
 bool g_out_of_memory = false;
 
+// set palette reset bit
+// current palette may be incorrect after rollback
+// (lightning / fire effect)
+// call this function after any kind of time travel
+void set_pallette_reset_bit(history_t& state)
+{
+	auto& p1_char = *std::get<0>(state).p1_character.get().ptr;
+	if (!p1_char.palette_status_bitmask)
+		p1_char.palette_status_bitmask |= 0x400;
+	auto& p2_char = *std::get<0>(state).p2_character.get().ptr;
+	if (!p2_char.palette_status_bitmask)
+		p2_char.palette_status_bitmask |= 0x400;
+}
+
 // rec player = rec / stop recording
 // rec enemy = stop world
 // play memory = play / stop playing
@@ -882,13 +898,15 @@ void __cdecl get_raw_input_data(input_data* out)
 
 	load(g_image_base, std::get<0>(g_cur_state));
 
-	if (in_match() && !std::get<0>(g_cur_state).pause_state.get())
+	auto& p1_char_optional = std::get<0>(g_cur_state).p1_character.get().ptr;
+	if (in_match() && p1_char_optional)
 	{
 		//memory_hook::g_capture = true;
 
 		if (g_speed <= 0)
 		{
 			g_cur_state = *g_prev_state;
+			set_pallette_reset_bit(g_cur_state);
 			const auto& ms = std::get<0>(g_cur_state);
 			const auto& rng = std::get<1>(g_cur_state);
 			const auto& data1 = std::get<2>(g_cur_state);
@@ -1047,6 +1065,7 @@ void __cdecl get_raw_input_data(input_data* out)
 				input = std::get<3>(g_cur_state);
 				if (g_playback_idx == 0)
 				{
+					set_pallette_reset_bit(g_cur_state);
 					const auto& ms = std::get<0>(g_cur_state);
 					const auto& rng = std::get<1>(g_cur_state);
 					const auto& data1 = std::get<2>(g_cur_state);
@@ -1111,14 +1130,17 @@ void __cdecl get_raw_input_data(input_data* out)
 	}
 	else
 	{
-		g_history.clear();
-		g_recording = false;
-		g_playing = false;
-		g_speed = 1;
-		g_manual_frame_advance = false;
-		g_speed_control_counter = 0;
-		memory_hook::g_capture = false;
-		memory_hook::g_allocations.clear();
+		if (!std::get<0>(g_cur_state).pause_state.get())
+		{
+			g_history.clear();
+			g_recording = false;
+			g_playing = false;
+			g_speed = 1;
+			g_manual_frame_advance = false;
+			g_speed_control_counter = 0;
+			memory_hook::g_capture = false;
+			memory_hook::g_allocations.clear();
+		}
 	}
 
 	EnableRoundEndCondition(!g_recording);
