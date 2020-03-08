@@ -118,9 +118,9 @@ int32_t __stdcall play_sound(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t
 void game_tick();
 void __stdcall sleep(uint32_t ms);
 const auto sleep_ptr = &sleep;
-int __cdecl write_cockpit_font_internal(int x, int y, float unknown, uint8_t alpha, float scale);
+int __cdecl write_cockpit_font_internal(int x, int y, float z, uint8_t alpha, float scale);
 // Wrapper for write_cockpit_font_internal
-int write_cockpit_font(const char* buffer, int x, int y, float unknown, uint8_t alpha, float scale);
+int write_cockpit_font(const char* buffer, int x, int y, float z, uint8_t alpha, float scale);
 void process_input();
 void process_objects();
 
@@ -1302,7 +1302,7 @@ int32_t __stdcall play_sound(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_
 	}
 }
 
-int write_cockpit_font(const char* buffer, int x, int y, float unknown, uint8_t alpha, float scale)
+int write_cockpit_font(const char* buffer, int x, int y, float z, uint8_t alpha, float scale)
 {
 	auto f = g_state.write_cockpit_font;
 	uint32_t alpha_ = alpha;
@@ -1313,7 +1313,7 @@ int write_cockpit_font(const char* buffer, int x, int y, float unknown, uint8_t 
 	{
 		push scale
 		push alpha_
-		push unknown
+		push z
 		push y
 		push x
 		mov eax, buffer
@@ -1384,31 +1384,31 @@ void process_objects()
 		const int increment_y = 0x18;
 		const int key_x = 0x16a;
 		const int value_x = 0x21a;
-		const float key_f = 265;
-		const float value_f = 266;
+		const float key_z = 265;
+		const float value_z = 266;
 		int y = 0xb8;
 		{
 			y += increment_y;
-			write_cockpit_font("        STUN", key_x, y, key_f, 0xff, 1);
+			write_cockpit_font("        STUN", key_x, y, key_z, 0xff, 1);
 			if (g_extra_training_display.stun_accumulator != 0xffff)
 			{
 				char str[6];
 				format_int(str, g_extra_training_display.stun_accumulator);
-				write_cockpit_font(str, value_x, y, value_f, 0xff, 1);
+				write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
 			}
 			else
 			{
-				write_cockpit_font("FAINT", value_x, y, value_f, 0xff, 1);
+				write_cockpit_font("FAINT", value_x, y, value_z, 0xff, 1);
 			}
 
 			if (g_extra_training_display.faint_countdown)
 			{
 				y += increment_y;
-				write_cockpit_font("       FAINT", key_x, y, key_f, 0xff, 1);
+				write_cockpit_font("       FAINT", key_x, y, key_z, 0xff, 1);
 				{
 					char str[6];
 					format_int(str, g_extra_training_display.faint_countdown);
-					write_cockpit_font(str, value_x, y, value_f, 0xff, 1);
+					write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
 				}
 			}
 		}
