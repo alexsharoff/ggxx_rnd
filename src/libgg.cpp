@@ -118,9 +118,7 @@ int32_t __stdcall play_sound(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t
 void game_tick();
 void __stdcall sleep(uint32_t ms);
 const auto sleep_ptr = &sleep;
-int __cdecl write_cockpit_font_internal(int x, int y, float z, uint8_t alpha, float scale);
-// Wrapper for write_cockpit_font_internal
-int write_cockpit_font(const char* buffer, int x, int y, float z, uint8_t alpha, float scale);
+typedef int (__cdecl write_cockpit_font_func_t)(const char* buffer, int x, int y, float z, uint8_t alpha, float scale);
 void player_status_ticker(const char* message, uint32_t side);
 void process_input();
 void process_objects();
@@ -646,7 +644,7 @@ struct gg_state
 		ptr_chain<decltype(play_sound)*, 0, 0x58, 0x34, 0, 0x14>,
 		0x556020> play_sound;
 	// TODO: how to populate it automatically?
-	decltype(write_cockpit_font_internal)* write_cockpit_font = nullptr;
+	write_cockpit_font_func_t* write_cockpit_font = nullptr;
 	decltype(player_status_ticker)* player_status_ticker = nullptr;
 	memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
 	memory_offset<extra_config, 0x51B180> extra_config[2];
@@ -797,7 +795,7 @@ extern "C" __declspec(dllexport) void libgg_init()
 	{
 		g_image_base = (char*)::GetModuleHandle(nullptr);
 		load(g_image_base, g_state);
-		g_state.write_cockpit_font = reinterpret_cast<decltype(write_cockpit_font_internal)*>(g_image_base + 0x10E530);
+		g_state.write_cockpit_font = reinterpret_cast<write_cockpit_font_func_t*>(g_image_base + 0x10ECF0);
 		g_state.player_status_ticker = reinterpret_cast<decltype(player_status_ticker)*>(g_image_base + 0x10E190);
 		g_state_orig = g_state;
 		s_is_ready = true;
@@ -1305,26 +1303,6 @@ int32_t __stdcall play_sound(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_
 	}
 }
 
-int write_cockpit_font(const char* buffer, int x, int y, float z, uint8_t alpha, float scale)
-{
-	auto f = g_state.write_cockpit_font;
-	uint32_t alpha_ = alpha;
-	// Custom calling convention due to LTCG:
-	// * First argument in EAX
-	// * Cleanup by the caller
-	__asm
-	{
-		push scale
-		push alpha_
-		push z
-		push y
-		push x
-		mov eax, buffer
-		call f
-		add esp, 4*5
-	}
-}
-
 void player_status_ticker(const char* message, uint32_t side)
 {
 	auto f = g_state.player_status_ticker;
@@ -1375,25 +1353,25 @@ void process_objects()
 {
 	const auto f = *g_state_orig.process_objects.get().get();
 	f();
-	write_cockpit_font("DEV BUILD", 50, 100, 1, 0x50, 1);
+	g_state.write_cockpit_font("DEV BUILD", 50, 100, 1, 0x50, 1);
 	if (g_recording)
 	{
 		auto str = "REC " + std::to_string(g_record_idx);
-		write_cockpit_font(str.c_str(), 285, 100, 1, 0xFF, 1);
+		g_state.write_cockpit_font(str.c_str(), 285, 100, 1, 0xFF, 1);
 	}
 	if (g_playing)
 	{
 		auto str = "PLAY " + std::to_string(g_playback_idx);
-		write_cockpit_font(str.c_str(), 285, 100, 1, 0xFF, 1);
+		g_state.write_cockpit_font(str.c_str(), 285, 100, 1, 0xFF, 1);
 	}
 	if (g_speed != 1 || g_manual_frame_advance)
 	{
 		auto str = "SPEED " + std::to_string(g_speed);
-		write_cockpit_font(str.c_str(), 285, 150, 1, 0xFF, 1);
+		g_state.write_cockpit_font(str.c_str(), 285, 150, 1, 0xFF, 1);
 	}
 	if (g_out_of_memory)
 	{
-		write_cockpit_font("OUT OF MEMORY!", 50, 150, 1, 0xff, 1);
+		g_state.write_cockpit_font("OUT OF MEMORY!", 50, 150, 1, 0xff, 1);
 	}
 	if (in_match() && g_state.game_mode == 0x101 && !std::get<0>(g_cur_state).pause_state.get())
 	{
@@ -1406,26 +1384,26 @@ void process_objects()
 		int y = 0xb8;
 		{
 			y += increment_y;
-			write_cockpit_font("        STUN", key_x, y, key_z, 0xff, 1);
+			g_state.write_cockpit_font("        STUN", key_x, y, key_z, 0xff, 1);
 			if (g_extra_training_display.stun_accumulator != 0xffff)
 			{
 				char str[6];
 				format_int(str, g_extra_training_display.stun_accumulator);
-				write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
+				g_state.write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
 			}
 			else
 			{
-				write_cockpit_font("FAINT", value_x, y, value_z, 0xff, 1);
+				g_state.write_cockpit_font("FAINT", value_x, y, value_z, 0xff, 1);
 			}
 
 			if (g_extra_training_display.faint_countdown)
 			{
 				y += increment_y;
-				write_cockpit_font("       FAINT", key_x, y, key_z, 0xff, 1);
+				g_state.write_cockpit_font("       FAINT", key_x, y, key_z, 0xff, 1);
 				{
 					char str[6];
 					format_int(str, g_extra_training_display.faint_countdown);
-					write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
+					g_state.write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
 				}
 			}
 		}
