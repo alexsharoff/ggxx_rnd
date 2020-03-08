@@ -121,6 +121,7 @@ const auto sleep_ptr = &sleep;
 int __cdecl write_cockpit_font_internal(int x, int y, float z, uint8_t alpha, float scale);
 // Wrapper for write_cockpit_font_internal
 int write_cockpit_font(const char* buffer, int x, int y, float z, uint8_t alpha, float scale);
+void player_status_ticker(const char* message, uint32_t side);
 void process_input();
 void process_objects();
 
@@ -646,6 +647,7 @@ struct gg_state
 		0x556020> play_sound;
 	// TODO: how to populate it automatically?
 	decltype(write_cockpit_font_internal)* write_cockpit_font = nullptr;
+	decltype(player_status_ticker)* player_status_ticker = nullptr;
 	memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
 	memory_offset<extra_config, 0x51B180> extra_config[2];
 	// TODO: at least 14! Double check
@@ -796,6 +798,7 @@ extern "C" __declspec(dllexport) void libgg_init()
 		g_image_base = (char*)::GetModuleHandle(nullptr);
 		load(g_image_base, g_state);
 		g_state.write_cockpit_font = reinterpret_cast<decltype(write_cockpit_font_internal)*>(g_image_base + 0x10E530);
+		g_state.player_status_ticker = reinterpret_cast<decltype(player_status_ticker)*>(g_image_base + 0x10E190);
 		g_state_orig = g_state;
 		s_is_ready = true;
 		g_state.get_raw_input_data.get().set(get_raw_input_data);
@@ -1319,6 +1322,20 @@ int write_cockpit_font(const char* buffer, int x, int y, float z, uint8_t alpha,
 		mov eax, buffer
 		call f
 		add esp, 4*5
+	}
+}
+
+void player_status_ticker(const char* message, uint32_t side)
+{
+	auto f = g_state.player_status_ticker;
+	// Custom calling convention due to LTCG:
+	// * Message in ESI
+	// * Side (0, 1) in EAX
+	__asm
+	{
+		mov esi, message
+		mov eax, side
+		call f
 	}
 }
 
