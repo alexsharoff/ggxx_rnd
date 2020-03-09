@@ -143,6 +143,10 @@ typedef int (__cdecl write_pretty_font_func_t)(
 typedef int (__cdecl write_utf8_font_func_t)(
     int x, int y, float z, float opacity, uint32_t unknown3, uint32_t unknown4
 );
+// Color in EAX: 0xAARRGGBB
+typedef int (__cdecl draw_rect_func_t)(
+    uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t unknown
+);
 void player_status_ticker(const char* message, uint32_t side);
 void process_input();
 void process_objects();
@@ -671,6 +675,7 @@ struct gg_state
     write_cockpit_font_func_t* write_cockpit_font = nullptr;
     write_pretty_font_func_t* write_pretty_font = nullptr;
     write_utf8_font_func_t* write_utf8_font = nullptr;
+    draw_rect_func_t* draw_rect = nullptr;
     decltype(player_status_ticker)* player_status_ticker = nullptr;
     memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
     memory_offset<extra_config, 0x51B180> extra_config[2];
@@ -825,6 +830,7 @@ extern "C" __declspec(dllexport) void libgg_init()
         g_state.write_pretty_font = reinterpret_cast<write_pretty_font_func_t*>(g_image_base + 0x4CFF0);
         // :base+22B280 = copy of write_utf8_font?
         g_state.write_utf8_font = reinterpret_cast<write_utf8_font_func_t*>(g_image_base + 0x22BBD0);
+        g_state.draw_rect = reinterpret_cast<draw_rect_func_t*>(g_image_base + 0x25BF40);
         g_state.player_status_ticker = reinterpret_cast<decltype(player_status_ticker)*>(g_image_base + 0x10E190);
         g_state_orig = g_state;
         s_is_ready = true;
@@ -1403,6 +1409,23 @@ void write_utf8_font(const char* text, int x, int y,
     }
     dump(scale_x_orig, g_image_base + 0x3EE774);
     dump(scale_y_orig, g_image_base + 0x3EE83C);
+}
+
+void draw_rect(uint32_t color, uint32_t x1, uint32_t y1,
+               uint32_t x2, uint32_t y2, uint32_t unknown)
+{
+    auto f = g_state.draw_rect;
+    __asm
+    {
+        push unknown
+        push y2
+        push x2
+        push y1
+        push x1
+        mov eax, color
+        call f
+        add esp, 4*5
+    }
 }
 
 void process_objects()
