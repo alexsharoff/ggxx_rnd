@@ -119,6 +119,30 @@ void game_tick();
 void __stdcall sleep(uint32_t ms);
 const auto sleep_ptr = &sleep;
 typedef int (__cdecl write_cockpit_font_func_t)(const char* buffer, int x, int y, float z, uint8_t alpha, float scale);
+// Example arguments:
+// TRAINING MENU, 42000000, 42200000, 40000000, 1, 5, 3f800000
+// PLAYER, 42800000, 42A00000, 40000000, 1, 5, 3F800000
+// ENEMY, 43C00000, 42A00000, 40000000, A0, 5, 3F800000
+// H-SLASH, 42000000, 43480000, 40000000,A0, 7, 3F800000
+// SWITCH, 43830000, 42C00000, 40800000, 1, 6, 3F800000
+// ver R , 44070000 , 43A30000, 41880000, 1, 0x11, 3F000000
+typedef int (__cdecl write_pretty_font_func_t)(
+	const char* text, float x, float y, float z,
+	uint32_t flags, uint32_t font, float scale
+);
+// Example arguments (EAX = ptr to utf-8 text):
+// (HELP & OPTIONS), 140, 56, 41400000, 3F800000, FFFFFFFF, 0
+// (GAME SETTINGS), 140, 84, 41400000, 3F800000, FFFFFFFF, 0
+// (CONTROLLER SETTINGS), 140, 9c, 41400000, 402A0000, FFFFFFFF, 0
+// (FRANÇAIS), 198, 138 ,40000000, 3F800000, FFFF7A01, 0
+// (Sign in have been changed), 280, 120, 0, 3F800000, FFFFFFFF, 0
+// (Quit game and return to main menu?), 140, b0, 3F800000, 3F800000, FFFFFFFF, 0
+// Uses global values:
+// :base+3EE774 (float): font x scale
+// :base+3EE83C (float): font y scale
+typedef int (__cdecl write_utf8_font_func_t)(
+	int x, int y, float z, float opacity, uint32_t unknown3, uint32_t unknown4
+);
 void player_status_ticker(const char* message, uint32_t side);
 void process_input();
 void process_objects();
@@ -645,6 +669,8 @@ struct gg_state
 		0x556020> play_sound;
 	// TODO: how to populate it automatically?
 	write_cockpit_font_func_t* write_cockpit_font = nullptr;
+	write_pretty_font_func_t* write_pretty_font = nullptr;
+	write_utf8_font_func_t* write_utf8_font = nullptr;
 	decltype(player_status_ticker)* player_status_ticker = nullptr;
 	memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
 	memory_offset<extra_config, 0x51B180> extra_config[2];
@@ -796,6 +822,9 @@ extern "C" __declspec(dllexport) void libgg_init()
 		g_image_base = (char*)::GetModuleHandle(nullptr);
 		load(g_image_base, g_state);
 		g_state.write_cockpit_font = reinterpret_cast<write_cockpit_font_func_t*>(g_image_base + 0x10ECF0);
+		g_state.write_pretty_font = reinterpret_cast<write_pretty_font_func_t*>(g_image_base + 0x4CFF0);
+		// :base+22B280 = copy of write_utf8_font?
+		g_state.write_utf8_font = reinterpret_cast<write_utf8_font_func_t*>(g_image_base + 0x22BBD0);
 		g_state.player_status_ticker = reinterpret_cast<decltype(player_status_ticker)*>(g_image_base + 0x10E190);
 		g_state_orig = g_state;
 		s_is_ready = true;
@@ -1347,6 +1376,33 @@ std::errc format_int(char (&buffer)[N], int value, int pad = 3)
 		*p = 0;
 	}
 	return std::errc();
+}
+
+void write_utf8_font(const char* text, int x, int y,
+					 float z, float opacity,
+					 uint32_t unknown3, uint32_t unknown4,
+					 float scale_x = 1, float scale_y = 1)
+{
+	float scale_x_orig, scale_y_orig;
+	load(g_image_base + 0x3EE774, scale_x_orig);
+	load(g_image_base + 0x3EE83C, scale_y_orig);
+	dump(scale_x, g_image_base + 0x3EE774);
+	dump(scale_y, g_image_base + 0x3EE83C);
+	auto f = g_state.write_utf8_font;
+	__asm
+	{
+		push unknown4
+		push unknown3
+		push opacity
+		push z
+		push y
+		push x
+		mov eax, text
+		call f
+		add esp, 4*6
+	}
+	dump(scale_x_orig, g_image_base + 0x3EE774);
+	dump(scale_y_orig, g_image_base + 0x3EE83C);
 }
 
 void process_objects()
