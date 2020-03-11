@@ -126,7 +126,7 @@ typedef int (__cdecl write_cockpit_font_func_t)(const char* buffer, int x, int y
 // H-SLASH, 42000000, 43480000, 40000000,A0, 7, 3F800000
 // SWITCH, 43830000, 42C00000, 40800000, 1, 6, 3F800000
 // ver R , 44070000 , 43A30000, 41880000, 1, 0x11, 3F000000
-typedef int (__cdecl write_pretty_font_func_t)(
+typedef void (__cdecl write_pretty_font_func_t)(
     const char* text, float x, float y, float z,
     uint32_t flags, uint32_t font, float scale
 );
@@ -140,12 +140,44 @@ typedef int (__cdecl write_pretty_font_func_t)(
 // Uses global values:
 // :base+3EE774 (float): font x scale
 // :base+3EE83C (float): font y scale
-typedef int (__cdecl write_utf8_font_func_t)(
+typedef void (__cdecl write_utf8_font_func_t)(
     int x, int y, float z, float opacity, uint32_t unknown3, uint32_t unknown4
 );
 // Color in EAX: 0xAARRGGBB
-typedef int (__cdecl draw_rect_func_t)(
+typedef void (__cdecl draw_rect_func_t)(
     uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t unknown
+);
+// unknown1 = 3, unknown2 = 1
+// process_objects() deletes previously drawn buttons
+// input: first byte = direction bitmask, second byte = action bitmask
+// input must not contain both directions and actions
+// split input and call draw_pressed_buttons_func_t two times if needed
+typedef void (__cdecl draw_pressed_buttons_func_t)(
+    uint32_t input, uint32_t x, uint32_t y, uint32_t unknown1, uint32_t unknown2
+);
+// Remap action buttons according to player's controller config.
+// mode: 0 (controller), 1-4 (presets). Value doesn't really matter,
+// as long as it's not 0. Passing 0 results in incorrect button mapping.
+// This is due to a bug in GG: set MODE to CONTROLLER and DISPLAY to INPUT,
+// displayed buttons will be incorrect.
+// input registers:
+// * ecx: copy of input
+// * edx: active_object_state* for current player
+// output registers:
+// * eax: result
+typedef uint32_t (__cdecl remap_action_buttons_func_t)(uint32_t mode);
+// This function is doing some useless bit-swapping, but it's required for
+// draw_pressed_buttons_func_t.
+// unknown = 0
+// input registers:
+// * ecx: copy of input
+// output registers:
+// * eax: result
+typedef uint32_t (__cdecl remap_direction_buttons_func_t)(uint32_t input, uint32_t unknown);
+// Draw an arrow icon. For example, DISPLAY option in training mode pause menu.
+// unknown = 2
+typedef void (__cdecl draw_arrow_func_t)(
+    uint32_t arrow_type, uint32_t x, uint32_t y, uint32_t unknown, uint32_t alpha
 );
 void player_status_ticker(const char* message, uint32_t side);
 void process_input();
@@ -623,8 +655,8 @@ struct game_config
         bitmask pd; // 3c
         bitmask pks; // 40
         bitmask pksh; // 44
-        // 1-4, 0=controller, 5=custom
-        uint32_t preset_id; // 48
+        // 1-4 presets, 0=controller, 5=custom
+        uint32_t mode_id; // 48
         uint32_t unknown2; // 4c
     };
     controller_config player_controller_config[2];
@@ -676,6 +708,10 @@ struct gg_state
     write_pretty_font_func_t* write_pretty_font = nullptr;
     write_utf8_font_func_t* write_utf8_font = nullptr;
     draw_rect_func_t* draw_rect = nullptr;
+    draw_pressed_buttons_func_t* draw_pressed_buttons = nullptr;
+    remap_action_buttons_func_t* remap_action_buttons = nullptr;
+    remap_direction_buttons_func_t* remap_direction_buttons = nullptr;
+    draw_arrow_func_t* draw_arrow = nullptr;
     decltype(player_status_ticker)* player_status_ticker = nullptr;
     memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
     memory_offset<extra_config, 0x51B180> extra_config[2];
@@ -831,6 +867,10 @@ extern "C" __declspec(dllexport) void libgg_init()
         // :base+22B280 = copy of write_utf8_font?
         g_state.write_utf8_font = reinterpret_cast<write_utf8_font_func_t*>(g_image_base + 0x22BBD0);
         g_state.draw_rect = reinterpret_cast<draw_rect_func_t*>(g_image_base + 0x25BF40);
+        g_state.draw_pressed_buttons = reinterpret_cast<draw_pressed_buttons_func_t*>(g_image_base + 0x4CE00);
+        g_state.remap_action_buttons = reinterpret_cast<remap_action_buttons_func_t*>(g_image_base + 0x1D42C0);
+        g_state.remap_direction_buttons = reinterpret_cast<remap_direction_buttons_func_t*>(g_image_base + 0x1D4370);
+        g_state.draw_arrow = reinterpret_cast<draw_arrow_func_t*>(g_image_base + 0x4CBE0);
         g_state.player_status_ticker = reinterpret_cast<decltype(player_status_ticker)*>(g_image_base + 0x10E190);
         g_state_orig = g_state;
         s_is_ready = true;
@@ -1428,10 +1468,71 @@ void draw_rect(uint32_t color, uint32_t x1, uint32_t y1,
     }
 }
 
+uint32_t remap_action_buttons(uint32_t input, const active_object_state* obj)
+{
+    auto f = g_state.remap_action_buttons;
+    __asm
+    {
+        mov ecx, input
+        mov edx, obj
+        push 1
+        call f
+        add esp, 4
+    }
+}
+
+uint32_t remap_direction_buttons(uint32_t input)
+{
+    uint32_t input_ = 0;
+    // additional preprocessing is required
+    if (input & 0x10)
+        input_ |= 4;
+    if (input & 0x20)
+        input_ |= 2;
+    if (input & 0x40)
+        input_ |= 8;
+    if (input & 0x80)
+        input_ |= 1;
+
+    auto f = g_state.remap_direction_buttons;
+    __asm
+    {
+        mov ecx, input_
+        push 0
+        push input_
+        call f
+        add esp, 4*2
+    }
+}
+
 void process_objects()
 {
     const auto f = *g_state_orig.process_objects.get().get();
     f();
+    if (g_manual_frame_advance)
+    {
+        match_state ms;
+        load(g_image_base, ms.controller_state);
+        const auto& controller_state = ms.controller_state.get();
+        if (controller_state[0].bitmask_cur)
+        {
+            const auto input = controller_state[0].bitmask_cur;
+            const auto obj = (active_object_state**)(g_image_base + 0x516778);
+            const auto directions = remap_direction_buttons(input);
+            g_state.draw_pressed_buttons(directions, 20, 300, 3, 1);
+            const auto buttons = remap_action_buttons(input, *obj);
+            g_state.draw_pressed_buttons(buttons, 50, 300, 3, 1);
+        }
+        if (controller_state[1].bitmask_cur)
+        {
+            const auto input = controller_state[1].bitmask_cur;
+            const auto obj = (active_object_state**)(g_image_base + 0x51A07C);
+            const auto directions = remap_direction_buttons(input);
+            g_state.draw_pressed_buttons(directions, 550, 300, 3, 1);
+            const auto buttons = remap_action_buttons(input, *obj);
+            g_state.draw_pressed_buttons(buttons, 580, 300, 3, 1);
+        }
+    }
     g_state.write_cockpit_font("DEV BUILD", 50, 100, 1, 0x50, 1);
     if (g_recording)
     {
