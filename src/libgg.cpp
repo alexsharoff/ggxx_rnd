@@ -205,7 +205,9 @@ struct gg_char_state
     char data1[0x7c];
     uint16_t stun_accumulator; // 7c
     uint16_t faint_countdown; // 7e
-    char data2[0xc8];
+    char data2[7]; // 80
+    uint8_t stun_resistance; // 87
+    char data3[0xc0]; // 88
 };
 #pragma pack(pop)
 
@@ -963,6 +965,7 @@ bool g_out_of_memory = false;
 struct extra_training_display
 {
     uint16_t stun_accumulator;
+    uint8_t stun_resistance;
     uint16_t faint_countdown;
 } g_extra_training_display;
 
@@ -1232,6 +1235,7 @@ void __cdecl get_raw_input_data(input_data* out)
             // in training
             const auto& p2_char_state = std::get<0>(g_cur_state).character_state.get()[1];
             g_extra_training_display.stun_accumulator = p2_char_state.stun_accumulator;
+            g_extra_training_display.stun_resistance = p2_char_state.stun_resistance;
             g_extra_training_display.faint_countdown = p2_char_state.faint_countdown;
         }
 
@@ -1399,29 +1403,27 @@ void process_input()
 }
 
 template<size_t N, std::enable_if_t<(N > 1)>* = nullptr>
-std::errc format_int(char (&buffer)[N], int value, int pad = 3)
+std::pair<char*, std::errc> format_int(char (&buffer)[N], int value, int pad = 3, char pad_c = ' ')
 {
     auto [p, ec] = std::to_chars(buffer, buffer + N - 1, value);
     if (ec != std::errc())
-        return ec;
-    const size_t len = p - buffer;
+        return {nullptr, ec};
+    char* end = p;
+    const size_t len = end - buffer;
     if (len < pad)
     {
         const size_t diff = pad - len;
-        buffer[pad] = 0;
         for (int i = pad - 1; i >= 0; --i)
         {
             if (i < diff)
-                buffer[i] = ' ';
+                buffer[i] = pad_c;
             else
                 buffer[i] = buffer[i - diff];
         }
     }
-    else
-    {
-        *p = 0;
-    }
-    return std::errc();
+    *end = 0;
+
+    return {end, std::errc()};
 }
 
 void write_utf8_font(const char* text, int x, int y,
@@ -1567,8 +1569,17 @@ void process_objects()
             g_state.write_cockpit_font("        STUN", key_x, y, key_z, 0xff, 1);
             if (g_extra_training_display.stun_accumulator != 0xffff)
             {
-                char str[6];
-                format_int(str, g_extra_training_display.stun_accumulator);
+                char str[8];
+                auto begin = std::begin(str);
+                const auto end = std::end(str);
+                begin = std::to_chars(
+                    begin, end, g_extra_training_display.stun_accumulator / 100
+                ).ptr;
+                *begin = '/';
+                begin = std::to_chars(
+                    begin + 1, end, g_extra_training_display.stun_resistance
+                ).ptr;
+                *begin = 0;
                 g_state.write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
             }
             else
