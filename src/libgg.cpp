@@ -495,8 +495,10 @@ struct match_state
     memory_offset<ptr_chain<active_object_state, 0, 0>, 0x51A07C> p2_character;
     memory_offset<ptr_chain<projectiles, 0, 0>, 0x51677C> projectiles;
 
+    memory_offset<uint8_t[0x120], 0x4FDC00> training_mode_history;
+    memory_offset<uint8_t, 0x4FDD20> training_mode_cfg_display;
     // TODO: shorten / split this monstrosity
-    memory_offset<uint8_t[0x7E7D], 0x4FDC00> training_mode_history;
+    memory_offset<uint8_t[0x7D5C], 0x4FDC00> training_mode_data;
 
     memory_offset<uint32_t, 0x555FEC> pause_state;
 
@@ -576,6 +578,8 @@ struct reflect<match_state>
         &match_state::p2_character,
         &match_state::projectiles,
         &match_state::training_mode_history,
+        &match_state::training_mode_cfg_display,
+        &match_state::training_mode_data,
         &match_state::pause_state,
         &match_state::extra_rng_state,
 
@@ -1413,6 +1417,7 @@ std::pair<char*, std::errc> format_int(char (&buffer)[N], int value, int pad = 3
     if (len < pad)
     {
         const size_t diff = pad - len;
+        end += diff;
         for (int i = pad - 1; i >= 0; --i)
         {
             if (i < diff)
@@ -1555,9 +1560,12 @@ void process_objects()
     {
         g_state.write_cockpit_font("OUT OF MEMORY!", 50, 150, 1, 0xff, 1);
     }
-    if (in_match() && g_state.game_mode == 0x101 && !std::get<0>(g_cur_state).pause_state.get())
+
+    const auto training_mode = g_state.game_mode == 0x101;
+    const auto is_paused = std::get<0>(g_cur_state).pause_state.get();
+    const auto display_damage = std::get<0>(g_cur_state).training_mode_cfg_display.get() & 2;
+    if (in_match() && training_mode && !is_paused && display_damage)
     {
-        // TODO: don't display extra HUD if DISPLAY option is NONE or INPUT
         const int increment_y = 0x18;
         const int key_x = 0x16a;
         const int value_x = 0x21a;
