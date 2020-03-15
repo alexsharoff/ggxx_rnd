@@ -861,12 +861,25 @@ HLOCAL WINAPI LocalAlloc(UINT uFlags, SIZE_T uBytes)
 
 }
 
+void apply_patches(char* image_base)
+{
+    // REC PLAYER => RECORD ALL
+    dump("RECORD ALL", image_base + 0x3191EC);
+    // REC ENEMY = FRAME STOP
+    dump("FRAME STOP", image_base + 0x3191F8);
+    // ENEMY JUMP = FRAME NEXT
+    dump("FRAME NEXT", image_base + 0x319224);
+    // ENEMY WALK = FRAME PREV
+    dump("FRAME PREV", image_base + 0x319218);
+}
+
 extern "C" __declspec(dllexport) void libgg_init()
 {
     static bool s_is_ready = false;
     if (!s_is_ready)
     {
         g_image_base = (char*)::GetModuleHandle(nullptr);
+        apply_patches(g_image_base);
         load(g_image_base, g_state);
         g_state.write_cockpit_font = reinterpret_cast<write_cockpit_font_func_t*>(g_image_base + 0x10ECF0);
         g_state.write_pretty_font = reinterpret_cast<write_pretty_font_func_t*>(g_image_base + 0x4CFF0);
@@ -966,12 +979,6 @@ uint16_t g_speed_control_counter = 0;
 std::optional<history_t> g_prev_state;
 history_t g_cur_state;
 bool g_out_of_memory = false;
-struct extra_training_display
-{
-    uint16_t stun_accumulator;
-    uint8_t stun_resistance;
-    uint16_t faint_countdown;
-} g_extra_training_display;
 
 // set palette reset bit
 // current palette may be incorrect after rollback
@@ -1007,7 +1014,8 @@ void __cdecl get_raw_input_data(input_data* out)
     load(g_image_base, std::get<0>(g_cur_state));
 
     auto& p1_char_optional = std::get<0>(g_cur_state).p1_character.get().ptr;
-    if (in_match() && p1_char_optional)
+    const auto training_mode = g_state.game_mode == 0x101;
+    if (in_match() && training_mode && p1_char_optional)
     {
         //memory_hook::g_capture = true;
 
@@ -1099,46 +1107,31 @@ void __cdecl get_raw_input_data(input_data* out)
                 g_out_of_memory = false;
             }
 
-            if (bitmask & cfg.enemy_jump.bit)
+            if (bitmask & cfg.enemy_jump.bit && g_manual_frame_advance)
             {
                 speed_control_enabled = true;
-                if (!g_manual_frame_advance)
+                if (!(g_prev_bitmask[i] & cfg.enemy_jump.bit) || g_speed_control_counter > 60)
                 {
-                    g_speed = 2;
+                    g_speed = 1;
                 }
                 else
                 {
-                    if (!(g_prev_bitmask[i] & cfg.enemy_jump.bit) || g_speed_control_counter > 60)
-                    {
-                        g_speed = 1;
-                    }
-                    else
-                    {
-                        g_speed = 0;
-                    }
+                    g_speed = 0;
                 }
                 ++g_speed_control_counter;
             }
 
-            if (bitmask & cfg.enemy_walk.bit)
+            if (bitmask & cfg.enemy_walk.bit && g_manual_frame_advance)
             {
                 speed_control_enabled = true;
-                if (!g_manual_frame_advance)
+                if (!(g_prev_bitmask[i] & cfg.enemy_walk.bit) || g_speed_control_counter > 60)
                 {
-                    g_speed = 0;
+                    g_speed = -1;
                 }
                 else
                 {
-                    if (!(g_prev_bitmask[i] & cfg.enemy_walk.bit) || g_speed_control_counter > 60)
-                    {
-                        g_speed = -1;
-                    }
-                    else
-                    {
-                        g_speed = 0;
-                    }
+                    g_speed = 0;
                 }
-                ++g_speed_control_counter;
             }
 
             g_prev_bitmask[i] = bitmask;
@@ -1148,8 +1141,6 @@ void __cdecl get_raw_input_data(input_data* out)
         {
             if (g_manual_frame_advance)
                 g_speed = 0;
-            else
-                g_speed = 1;
             g_speed_control_counter = 0;
         }
 
@@ -1232,15 +1223,6 @@ void __cdecl get_raw_input_data(input_data* out)
         else
         {
             g_recording = false;
-        }
-
-        if (g_state.game_mode == 0x101)
-        {
-            // in training
-            const auto& p2_char_state = std::get<0>(g_cur_state).character_state.get()[1];
-            g_extra_training_display.stun_accumulator = p2_char_state.stun_accumulator;
-            g_extra_training_display.stun_resistance = p2_char_state.stun_resistance;
-            g_extra_training_display.faint_countdown = p2_char_state.faint_countdown;
         }
 
         g_prev_state = g_cur_state;
@@ -1516,9 +1498,9 @@ void process_objects()
 {
     const auto f = *g_state_orig.process_objects.get().get();
     f();
+    match_state ms;
     if (g_manual_frame_advance)
     {
-        match_state ms;
         load(g_image_base, ms.controller_state);
         const auto& controller_state = ms.controller_state.get();
         if (controller_state[0].bitmask_cur)
@@ -1551,10 +1533,9 @@ void process_objects()
         auto str = "PLAY " + std::to_string(g_playback_idx);
         g_state.write_cockpit_font(str.c_str(), 285, 100, 1, 0xFF, 1);
     }
-    if (g_speed != 1 || g_manual_frame_advance)
+    if (g_manual_frame_advance)
     {
-        auto str = "SPEED " + std::to_string(g_speed);
-        g_state.write_cockpit_font(str.c_str(), 285, 150, 1, 0xFF, 1);
+        g_state.write_cockpit_font("FRAME STOP", 285, 150, 1, 0xFF, 1);
     }
     if (g_out_of_memory)
     {
@@ -1566,6 +1547,12 @@ void process_objects()
     const auto display_damage = std::get<0>(g_cur_state).training_mode_cfg_display.get() & 2;
     if (in_match() && training_mode && !is_paused && display_damage)
     {
+        load(g_image_base, ms.character_state);
+        const auto& p2_char_state = ms.character_state.get()[1];
+        const auto stun_accumulator = p2_char_state.stun_accumulator;
+        const auto stun_resistance = p2_char_state.stun_resistance;
+        const auto faint_countdown = p2_char_state.faint_countdown;
+
         const int increment_y = 0x18;
         const int key_x = 0x16a;
         const int value_x = 0x21a;
@@ -1575,17 +1562,17 @@ void process_objects()
         {
             y += increment_y;
             g_state.write_cockpit_font("        STUN", key_x, y, key_z, 0xff, 1);
-            if (g_extra_training_display.stun_accumulator != 0xffff)
+            if (stun_accumulator != 0xffff)
             {
                 char str[8];
                 auto begin = std::begin(str);
                 const auto end = std::end(str);
                 begin = std::to_chars(
-                    begin, end, g_extra_training_display.stun_accumulator / 100
+                    begin, end, stun_accumulator / 100
                 ).ptr;
                 *begin = '/';
                 begin = std::to_chars(
-                    begin + 1, end, g_extra_training_display.stun_resistance
+                    begin + 1, end, stun_resistance
                 ).ptr;
                 *begin = 0;
                 g_state.write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
@@ -1595,13 +1582,13 @@ void process_objects()
                 g_state.write_cockpit_font("FAINT", value_x, y, value_z, 0xff, 1);
             }
 
-            if (g_extra_training_display.faint_countdown)
+            if (faint_countdown)
             {
                 y += increment_y;
                 g_state.write_cockpit_font("       FAINT", key_x, y, key_z, 0xff, 1);
                 {
                     char str[6];
-                    format_int(str, g_extra_training_display.faint_countdown);
+                    format_int(str, faint_countdown);
                     g_state.write_cockpit_font(str, value_x, y, value_z, 0xff, 1);
                 }
             }
