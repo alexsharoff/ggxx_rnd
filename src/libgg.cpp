@@ -861,6 +861,17 @@ HLOCAL WINAPI LocalAlloc(UINT uFlags, SIZE_T uBytes)
 
 }
 
+size_t g_vs_2p_jmp_addr = 0;
+bool g_network = false;
+void __declspec(naked) start_network()
+{
+    // TODO: implement
+    g_network = true;
+    __asm {
+        jmp g_vs_2p_jmp_addr
+    }
+}
+
 void apply_patches(char* image_base)
 {
     // REC PLAYER => RECORD ALL
@@ -871,6 +882,11 @@ void apply_patches(char* image_base)
     dump("FRAME NEXT", image_base + 0x319224);
     // ENEMY WALK = FRAME PREV
     dump("FRAME PREV", image_base + 0x319218);
+
+    load(image_base + 0x226448 + 2 * 4, g_vs_2p_jmp_addr);
+    // Replace main menu jump table entry for NETWORK
+    void* ptr = start_network;
+    dump(ptr, image_base + 0x226448 + 3 * 4);
 }
 
 extern "C" __declspec(dllexport) void libgg_init()
