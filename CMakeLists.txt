@@ -14,6 +14,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Link static MSVCRT for all targets
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+add_subdirectory(ggpo)
+
 add_compile_definitions(
     BOOST_ALL_NO_LIB
     BOOST_ERROR_CODE_HEADER_ONLY
@@ -26,7 +28,7 @@ include_directories(include)
 add_library(libgg SHARED
     src/libgg.cpp
 )
-target_link_libraries(libgg dbghelp)
+target_link_libraries(libgg dbghelp GGPO)
 
 add_subdirectory(src/steam_api_nop)
 

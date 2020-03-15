@@ -1,0 +1,9 @@
+https://github.com/pond3r/ggpo/commits/master
+
+https://github.com/pond3r/ggpo/commit/7ddadef8546a7d99ff0b3530c6056bc8ee4b9c0a
+
+Changes:
+* add_common_flags() removed from /src/CMakeLists.txt. GGPO should build with the same flags as other projects.
+* project() call moved from /CMakeLists.txt to /src/CMakeLists.txt
+* Unneeded files removed
+* Files from /src moved to /

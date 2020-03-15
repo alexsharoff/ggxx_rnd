@@ -6,6 +6,8 @@
 //#include "binary_serializer.h"
 #include "memory_dump.h"
 
+#include <ggponet.h>
+
 #include <Dbghelp.h>
 #include <Windows.h>
 #include <objbase.h>
