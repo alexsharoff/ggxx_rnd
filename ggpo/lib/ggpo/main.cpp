@@ -11,12 +11,28 @@
 #include "backends/spectator.h"
 #include "ggponet.h"
 
+namespace
+{
+struct GlobalInit
+{
+   GlobalInit()
+   {
+      srand(Platform::GetCurrentTimeMS() + Platform::GetProcessID());
+   }
+};
+#ifndef GGPO_SHARED_LIB
+GlobalInit g_init;
+#endif
+}
+
+#ifdef GGPO_SHARED_LIB
 BOOL WINAPI
 DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
-   srand(Platform::GetCurrentTimeMS() + Platform::GetProcessID());
+   GlobalInit init;
    return TRUE;
 }
+#endif
 
 void
 ggpo_log(GGPOSession *ggpo, const char *fmt, ...)

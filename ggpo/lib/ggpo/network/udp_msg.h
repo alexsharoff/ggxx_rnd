@@ -13,6 +13,7 @@
 
 #pragma pack(push, 1)
 
+// TODO: where's the checksum?
 struct UdpMsg
 {
    enum MsgType {

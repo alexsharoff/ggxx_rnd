@@ -13,9 +13,9 @@ target_include_directories(GGPO PUBLIC
 
 if(WIN32)
 	target_compile_options(GGPO PRIVATE "/W4" "/WX")
+	# Link to Multimedia API and Winsocks during a shared build.
+	target_link_libraries(GGPO PUBLIC winmm.lib ws2_32.lib)
 	if(BUILD_SHARED_LIBS)
-		# Link to Multimedia API and Winsocks during a shared build.
-		target_link_libraries(GGPO PUBLIC winmm.lib ws2_32.lib)
 		add_definitions(-DGGPO_SHARED_LIB)
 		add_definitions(-DGGPO_SDK_EXPORT)
 	endif()
