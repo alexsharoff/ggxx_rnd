@@ -2,29 +2,16 @@
 
 #include <Windows.h>
 
-#include <cstdint>
-
 #include "mini_reflection.h"
 //#include "binary_serializer.h"
 #include "memory_dump.h"
 
-#include "ggxxacpr.h"
 #include "network.h"
-
-#include <Dbghelp.h>
-#include <Windows.h>
-#include <objbase.h>
 
 #include <D3D9.h>
 
-#include <array>
-#include <charconv>
 #include <deque>
-#include <iostream>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
 
 using mini_reflection::reflect;
 using mini_reflection::member_tuple;
@@ -37,43 +24,6 @@ using memory_dump::memory_offset;
 using memory_dump::local_memory_accessor;
 using memory_dump::offset_value;
 
-
-void* PatchIAT(HMODULE module, void* oldSymbol, void* newSymbol)
-{
-    ULONG size = 0;
-    unsigned char* baseAddress = (unsigned char*)module;
-    void* originalSymbol = NULL;
-
-    IMAGE_IMPORT_DESCRIPTOR* importDescriptor = (IMAGE_IMPORT_DESCRIPTOR*)::ImageDirectoryEntryToData(
-        baseAddress, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &size);
-    if (importDescriptor == NULL)
-    {
-        //Patching module has no IDT.
-        return NULL;
-    }
-
-    while (importDescriptor->FirstThunk != 0)
-    {
-        IMAGE_THUNK_DATA* thunk = (IMAGE_THUNK_DATA*)(baseAddress + importDescriptor->FirstThunk);
-        while (thunk->u1.Function != 0)
-        {
-            if (thunk->u1.Function != (DWORD_PTR)oldSymbol) 
-            {
-                thunk++;
-                continue;
-            }
-
-            originalSymbol = (LPVOID)thunk->u1.Function;
-            DWORD protect;
-            ::VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), PAGE_EXECUTE_READWRITE, &protect);
-            thunk->u1.Function = (DWORD_PTR)newSymbol;
-            ::VirtualProtect(&thunk->u1.Function, sizeof(thunk->u1.Function), protect, &protect);
-        }
-        importDescriptor++;
-    }
-
-    return originalSymbol;
-}
 
 char* g_image_base = 0;
 
@@ -145,19 +95,6 @@ struct reflect<projectiles>
 {
     constexpr static auto members = member_tuple(
         &projectiles::objects
-    );
-};
-
-template<>
-struct reflect<directx_obj>
-{
-    constexpr static auto members = member_tuple(
-        &directx_obj::vtable1,
-        &directx_obj::vtable2,
-        &directx_obj::ptr1,
-        &directx_obj::ptr2,
-        &directx_obj::idx1,
-        &directx_obj::idx2
     );
 };
 
@@ -268,7 +205,7 @@ struct reflect<gg_state>
 
 gg_state g_state, g_state_orig;
 
-void EnableDrawing(bool enable)
+void enable_drawing(bool enable)
 {
     const auto addr = (size_t)g_image_base + 0x146FFD;
     if (enable)
@@ -283,7 +220,7 @@ void EnableDrawing(bool enable)
     }
 }
 
-void EnableRoundEndCondition(bool enable)
+void enable_round_end_condition(bool enable)
 {
     const auto addr = (size_t)g_image_base + 0x664CB;
     if (enable)
@@ -301,7 +238,7 @@ void EnableRoundEndCondition(bool enable)
 }
 
 // untested, but should work
-void EnablePauseMenu(bool enable)
+void enable_pause_menu(bool enable)
 {
     const auto addr = (size_t)g_image_base + 0xEBC19;
     if (enable)
@@ -318,50 +255,10 @@ void EnablePauseMenu(bool enable)
     }
 }
 
-namespace memory_hook
-{
-
-HLOCAL WINAPI LocalFree(HLOCAL hMem);
-HLOCAL WINAPI LocalAlloc(UINT uFlags, SIZE_T uBytes);
-
-decltype(LocalFree)* g_local_free_impl = nullptr;
-decltype(LocalAlloc)* g_local_alloc_impl = nullptr;
-bool g_capture = false;
-
-struct alloc_info
-{
-    HLOCAL hMem;
-    bool free;
-};
-std::vector<alloc_info> g_allocations;
-
-HLOCAL WINAPI LocalFree(HLOCAL hMem)
-{
-    if (g_capture)
-    {
-        g_allocations.push_back({hMem, true});
-        return NULL;
-    }
-    else
-    {
-        return g_local_free_impl(hMem);
-    }
-}
-
-HLOCAL WINAPI LocalAlloc(UINT uFlags, SIZE_T uBytes)
-{
-    HLOCAL res = g_local_alloc_impl(uFlags, uBytes);
-    if (g_capture)
-        g_allocations.push_back({res, false});
-    return res;
-}
-
-}
-
 size_t g_vs_2p_jmp_addr = 0;
 void __declspec(naked) jmp_menu_network()
 {
-    network::start();
+    network::start_session();
     __asm {
         jmp g_vs_2p_jmp_addr
     }
@@ -416,21 +313,17 @@ extern "C" __declspec(dllexport) void libgg_init()
         if (g_state.play_sound.get().ptr)
             g_state.play_sound.get().ptr = play_sound;
         dump(g_state, g_image_base);
-
-        memory_hook::g_local_free_impl = PatchIAT(
-            "kernel32.dll", "LocalFree", "d3d9.dll", memory_hook::LocalFree
-        );
-        memory_hook::g_local_alloc_impl = PatchIAT(
-            "kernel32.dll", "LocalAlloc", "d3d9.dll", memory_hook::LocalAlloc
-        );
     }
 }
 
-bool g_enable_fps_limit = true;
-
-
+bool g_invalidate_menu_fibers = true;
 bool in_match()
 {
+    if (g_invalidate_menu_fibers)
+    {
+        load(g_image_base, g_state.menu_fibers);
+        g_invalidate_menu_fibers = false;
+    }
     const auto& fibers = g_state.menu_fibers.get();
     for (const auto& f : fibers)
     {
@@ -444,6 +337,11 @@ bool in_match()
 
 void queue_destroy_fibers()
 {
+    if (g_invalidate_menu_fibers)
+    {
+        load(g_image_base, g_state.menu_fibers);
+        g_invalidate_menu_fibers = false;
+    }
     auto& fibers = g_state.menu_fibers.get();
     for (auto& f : fibers)
     {
@@ -453,31 +351,9 @@ void queue_destroy_fibers()
     dump(g_state.menu_fibers, g_image_base);
 }
 
-void free_orphaned_allocations(const std::vector<memory_hook::alloc_info>& items)
-{
-    for (const auto i: items)
-    {
-        if (!i.free)
-            ::LocalFree(i.hMem);
-    }
-}
-
-void free_memory_delayed(const std::vector<memory_hook::alloc_info>& items)
-{
-    for (const auto i: items)
-    {
-        if (i.free)
-            ::LocalFree(i.hMem);
-    }
-}
-
 std::deque<history_t> g_history;
 bool g_recording = false;
 bool g_playing = false;
-// 0: frame step
-// (-)1: normal (reverse)
-// (-)2: disable fps limit (reverse)
-// (-)3: disable drawing (reverse)
 int8_t g_speed = 1;
 bool g_manual_frame_advance = false;
 uint16_t g_prev_bitmask[] = {0, 0};
@@ -502,6 +378,24 @@ void set_pallette_reset_bit(history_t& state)
         p2_char.palette_status_bitmask |= 0x400;
 }
 
+void revert_state(history_t& state)
+{
+    set_pallette_reset_bit(state);
+    const auto& ms = std::get<0>(state);
+    const auto& rng = std::get<1>(state);
+    dump(ms, g_image_base);
+    dump(rng, g_image_base);
+}
+
+void save_current_state(const input_data& input, history_t& state)
+{
+    load(g_image_base, std::get<0>(state));
+    load(g_image_base, std::get<1>(state));
+    std::get<2>(state) = input;
+}
+
+bool g_capture_game_state = true;
+
 // rec player = rec / stop recording
 // rec enemy = stop world
 // play memory = play / stop playing
@@ -516,42 +410,36 @@ void __cdecl get_raw_input_data(input_data* out)
     f(&input);
     //std::swap(input.keys[0], input.keys[1]);
 
-    load(g_image_base, g_state.menu_fibers);
+    if (g_capture_game_state)
+    {
+        load(g_image_base, g_state.game_mode);
+        save_current_state(input, g_cur_state);
+    }
+    else
+    {
+        g_cur_state = history_t();
+    }
 
-    if (!in_match())
-        network::stop();
-
-    load(g_image_base, g_state.game_mode);
-
-    load(g_image_base, std::get<0>(g_cur_state));
+    const auto skip =  network::callbacks::raw_input_data(input);
 
     auto& p1_char_optional = std::get<0>(g_cur_state).p1_character.get().ptr;
     const auto training_mode = g_state.game_mode == 0x101;
-    if (in_match() && training_mode && p1_char_optional)
+    if (!skip && in_match() && training_mode && p1_char_optional)
     {
         //memory_hook::g_capture = true;
 
         if (g_speed <= 0)
         {
             g_cur_state = *g_prev_state;
-            set_pallette_reset_bit(g_cur_state);
-            const auto& ms = std::get<0>(g_cur_state);
-            const auto& rng = std::get<1>(g_cur_state);
-            dump(ms, g_image_base);
-            dump(rng, g_image_base);
-
+            revert_state(g_cur_state);
             //free_orphaned_allocations(memory_hook::g_allocations);
             //memory_hook::g_allocations.clear();
-        }
-        else
-        {
-            load(g_image_base, std::get<1>(g_cur_state));
         }
         //free_memory_delayed(memory_hook::g_allocations);
         //memory_hook::g_allocations.clear();
 
         bool speed_control_enabled = false;
-        const auto& controller_configs = g_state.config.get().player_controller_config;
+        const auto& controller_configs = get_game_config().player_controller_config;
         for (size_t i = 0; i < 2; ++i)
         {
             uint16_t bitmask = reverse_bytes(input.keys[i]);
@@ -619,13 +507,9 @@ void __cdecl get_raw_input_data(input_data* out)
             {
                 speed_control_enabled = true;
                 if (!(g_prev_bitmask[i] & cfg.enemy_jump.bit) || g_speed_control_counter > 60)
-                {
                     g_speed = 1;
-                }
                 else
-                {
                     g_speed = 0;
-                }
                 ++g_speed_control_counter;
             }
 
@@ -633,13 +517,9 @@ void __cdecl get_raw_input_data(input_data* out)
             {
                 speed_control_enabled = true;
                 if (!(g_prev_bitmask[i] & cfg.enemy_walk.bit) || g_speed_control_counter > 60)
-                {
                     g_speed = -1;
-                }
                 else
-                {
                     g_speed = 0;
-                }
                 ++g_speed_control_counter;
             }
 
@@ -653,16 +533,6 @@ void __cdecl get_raw_input_data(input_data* out)
             g_speed_control_counter = 0;
         }
 
-        bool drawing_enabled = true;
-        bool fps_limit_enabled = true;
-        if (std::abs(g_speed) == 2)
-            fps_limit_enabled = false;
-        if (std::abs(g_speed) == 3)
-            drawing_enabled = false;
-
-        EnableDrawing(drawing_enabled);
-        g_enable_fps_limit = fps_limit_enabled;
-
         std::get<2>(g_cur_state) = input;
 
         if (g_playing)
@@ -673,11 +543,7 @@ void __cdecl get_raw_input_data(input_data* out)
                 input = std::get<2>(g_cur_state);
                 if (g_playback_idx == 0)
                 {
-                    set_pallette_reset_bit(g_cur_state);
-                    const auto& ms = std::get<0>(g_cur_state);
-                    const auto& rng = std::get<1>(g_cur_state);
-                    dump(ms, g_image_base);
-                    dump(rng, g_image_base);
+                    revert_state(g_cur_state);
                 }
 
                 if (g_speed < 0)
@@ -745,24 +611,38 @@ void __cdecl get_raw_input_data(input_data* out)
             g_manual_frame_advance = false;
             g_speed_control_counter = 0;
             g_out_of_memory = false;
-            memory_hook::g_capture = false;
-            memory_hook::g_allocations.clear();
         }
     }
 
-    EnableRoundEndCondition(!g_recording);
+    if (!skip)
+        enable_round_end_condition(!g_recording);
 
     *out = input;
 }
 
+bool g_enable_fps_limit = true;
 int32_t limit_fps()
 {
     const auto f = *g_state_orig.limit_fps.get().get();
     return g_enable_fps_limit ? f() : 0;
 }
 
+bool g_invalidate_game_config = true;
+const game_config& get_game_config()
+{
+    if (g_invalidate_game_config)
+    {
+        load(g_image_base, g_state.config);
+        g_invalidate_game_config = false;
+    }
+    return g_state.config.get();
+}
+
+bool g_jump_to_menu = true;
 void game_tick()
 {
+    g_invalidate_menu_fibers = true;
+    g_invalidate_game_config = true;
     if (!g_state.play_sound.get().ptr)
     {
         load(g_image_base, g_state.play_sound);
@@ -779,33 +659,112 @@ void game_tick()
         load(g_image_base, g_state.direct3d9);
     }
 
-    load(g_image_base, g_state.config);
-
-    load(g_image_base, g_state.next_fiber_id);
-    if (g_state.next_fiber_id.get() == fiber_id::title)
+    if (g_jump_to_menu)
     {
-        g_state.main_menu_idx = main_menu_idx::training;
-        g_state.next_fiber_id = fiber_id::main_menu;
-        dump(g_state.next_fiber_id, g_image_base);
-        dump(g_state.main_menu_idx, g_image_base);
+        load(g_image_base, g_state.next_fiber_id);
+        if (g_state.next_fiber_id.get() == fiber_id::title)
+        {
+            g_state.main_menu_idx = main_menu_idx::training;
+            g_state.next_fiber_id = fiber_id::main_menu;
+            dump(g_state.next_fiber_id, g_image_base);
+            dump(g_state.main_menu_idx, g_image_base);
+            g_jump_to_menu = false;
+        }
     }
 
     const auto f = *g_state_orig.game_tick.get().get();
     f();
+
+    network::callbacks::game_tick_end();
 }
 
 void __stdcall sleep(uint32_t ms)
 {
+    if (network::callbacks::sleep(ms))
+        return;
+
     const auto f = **g_state_orig.sleep_ptr.get();
     f(ms);
 }
 
+typedef struct XACT_WAVE_INSTANCE_PROPERTIES
+{
+} XACT_WAVE_INSTANCE_PROPERTIES, *LPXACT_WAVE_INSTANCE_PROPERTIES;
+
+DECLARE_INTERFACE(IXACT3Wave)
+{
+    STDMETHOD(Destroy)(THIS) PURE;
+    STDMETHOD(Play)(THIS) PURE;
+    STDMETHOD(Stop)(THIS_ DWORD dwFlags) PURE;
+    STDMETHOD(Pause)(THIS_ BOOL fPause) PURE;
+    STDMETHOD(GetState)(THIS_ __out DWORD* pdwState) PURE;
+    STDMETHOD(SetPitch)(THIS_ SHORT pitch) PURE;
+    STDMETHOD(SetVolume)(THIS_ FLOAT volume) PURE;
+    STDMETHOD(SetMatrixCoefficients)(THIS_ UINT32 uSrcChannelCount, UINT32 uDstChannelCount, __in float* pMatrixCoefficients) PURE;
+    STDMETHOD(GetProperties)(THIS_ __out LPXACT_WAVE_INSTANCE_PROPERTIES pProperties) PURE;
+};
+
+struct IXACT3WaveBank {};
+
+// -----------------------------------------------------------------------------
+// XACT State flags
+// -----------------------------------------------------------------------------
+static const DWORD XACT_STATE_CREATED           = 0x00000001; // Created, but nothing else
+static const DWORD XACT_STATE_PREPARING         = 0x00000002; // In the middle of preparing
+static const DWORD XACT_STATE_PREPARED          = 0x00000004; // Prepared, but not yet played
+static const DWORD XACT_STATE_PLAYING           = 0x00000008; // Playing (though could be paused)
+static const DWORD XACT_STATE_STOPPING          = 0x00000010; // Stopping
+static const DWORD XACT_STATE_STOPPED           = 0x00000020; // Stopped
+static const DWORD XACT_STATE_PAUSED            = 0x00000040; // Paused (Can be combined with some of the other state flags above)
+static const DWORD XACT_STATE_INUSE             = 0x00000080; // Object is in use (used by wavebanks and soundbanks).
+static const DWORD XACT_STATE_PREPAREFAILED     = 0x80000000; // Object preparation failed.
+
+struct XACT3Wave : public IXACT3Wave
+{
+    STDMETHOD(Destroy)(THIS)
+    {
+        return S_OK;
+    }
+    STDMETHOD(Play)(THIS)
+    {
+        return S_OK;
+    }
+    STDMETHOD(Stop)(THIS_ DWORD dwFlags)
+    {
+        return S_OK;
+    }
+    STDMETHOD(Pause)(THIS_ BOOL fPause)
+    {
+        return S_OK;
+    }
+    STDMETHOD(GetState)(THIS_ __out DWORD* pdwState)
+    {
+        *pdwState = XACT_STATE_STOPPED;
+        return S_OK;
+    }
+    STDMETHOD(SetPitch)(THIS_ SHORT pitch)
+    {
+        return S_OK;
+    }
+    STDMETHOD(SetVolume)(THIS_ FLOAT volume)
+    {
+        return S_OK;
+    }
+    STDMETHOD(SetMatrixCoefficients)(THIS_ UINT32 uSrcChannelCount, UINT32 uDstChannelCount, __in float* pMatrixCoefficients)
+    {
+        return S_OK;
+    }
+    STDMETHOD(GetProperties)(THIS_ __out LPXACT_WAVE_INSTANCE_PROPERTIES pProperties)
+    {
+        return S_OK;
+    }
+};
+
 XACT3Wave w;
-std::unordered_map<IXACT3WaveBank*, std::unordered_set<int16_t>> known_sounds;
+// IXACT3WaveBank_Play(__in IXACT3WaveBank* pWaveBank, XACTINDEX nWaveIndex, DWORD dwFlags, DWORD dwPlayOffset, XACTLOOPCOUNT nLoopCount, __deref_out IXACT3Wave** ppWave)
 int32_t __stdcall play_sound(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_t a4, int8_t a5, IXACT3Wave** a6)
 {
-    auto [_, success] = known_sounds[a1].insert(a2);
-    if (success)
+    if (!network::callbacks::play_sound(a1, a2))
     {
         const auto f = *g_state_orig.play_sound.get().ptr;
         return f(a1, a2, a3, a4, a5, a6);

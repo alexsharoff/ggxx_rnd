@@ -28,6 +28,7 @@ include_directories(include)
 add_library(libgg SHARED
     src/libgg.cpp
     src/network.cpp
+    src/patch_iat.cpp
 )
 target_link_libraries(libgg dbghelp GGPO)
 

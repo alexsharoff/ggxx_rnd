@@ -4,42 +4,21 @@
 
 #include <cstdint>
 
-#include "mini_reflection.h"
-//#include "binary_serializer.h"
 #include "memory_dump.h"
 
-#include <Dbghelp.h>
 #include <Windows.h>
 #include <objbase.h>
 
 #include <D3D9.h>
 
-#include <array>
 #include <charconv>
 #include <deque>
-#include <iostream>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
 
 using memory_dump::ptr_chain;
 using memory_dump::rel_mem_ptr;
 using memory_dump::memory_offset;
 using memory_dump::offset_value;
 
-
-void* PatchIAT(HMODULE module, void* oldSymbol, void* newSymbol);
-
-template<class F>
-F* PatchIAT(LPCSTR symbolModule, LPCSTR symbolName, LPCSTR iatModuleName, F* replacement)
-{
-    void* import = ::GetProcAddress(::GetModuleHandleA(symbolModule), symbolName);
-    if (import == NULL)
-        return NULL;
-
-    return (F*)PatchIAT(::GetModuleHandleA(iatModuleName), import, replacement);
-}
 
 struct input_data
 {
@@ -50,98 +29,6 @@ struct input_data
     } joysticks[4];
     uint32_t unknown[2];
 };
-
-extern char* g_image_base;
-
-void __cdecl get_raw_input_data(input_data* out);
-int32_t limit_fps();
-
-typedef struct XACT_WAVE_INSTANCE_PROPERTIES
-{
-} XACT_WAVE_INSTANCE_PROPERTIES, *LPXACT_WAVE_INSTANCE_PROPERTIES;
-
-DECLARE_INTERFACE(IXACT3Wave)
-{
-    STDMETHOD(Destroy)(THIS) PURE;
-    STDMETHOD(Play)(THIS) PURE;
-    STDMETHOD(Stop)(THIS_ DWORD dwFlags) PURE;
-    STDMETHOD(Pause)(THIS_ BOOL fPause) PURE;
-    STDMETHOD(GetState)(THIS_ __out DWORD* pdwState) PURE;
-    STDMETHOD(SetPitch)(THIS_ SHORT pitch) PURE;
-    STDMETHOD(SetVolume)(THIS_ FLOAT volume) PURE;
-    STDMETHOD(SetMatrixCoefficients)(THIS_ UINT32 uSrcChannelCount, UINT32 uDstChannelCount, __in float* pMatrixCoefficients) PURE;
-    STDMETHOD(GetProperties)(THIS_ __out LPXACT_WAVE_INSTANCE_PROPERTIES pProperties) PURE;
-};
-
-struct IXACT3WaveBank {};
-// IXACT3WaveBank_Play(__in IXACT3WaveBank* pWaveBank, XACTINDEX nWaveIndex, DWORD dwFlags, DWORD dwPlayOffset, XACTLOOPCOUNT nLoopCount, __deref_out IXACT3Wave** ppWave)
-int32_t __stdcall play_sound(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t, IXACT3Wave**);
-void game_tick();
-void __stdcall sleep(uint32_t ms);
-typedef int (__cdecl write_cockpit_font_func_t)(const char* buffer, int x, int y, float z, uint8_t alpha, float scale);
-// Example arguments:
-// TRAINING MENU, 42000000, 42200000, 40000000, 1, 5, 3f800000
-// PLAYER, 42800000, 42A00000, 40000000, 1, 5, 3F800000
-// ENEMY, 43C00000, 42A00000, 40000000, A0, 5, 3F800000
-// H-SLASH, 42000000, 43480000, 40000000,A0, 7, 3F800000
-// SWITCH, 43830000, 42C00000, 40800000, 1, 6, 3F800000
-// ver R , 44070000 , 43A30000, 41880000, 1, 0x11, 3F000000
-typedef void (__cdecl write_pretty_font_func_t)(
-    const char* text, float x, float y, float z,
-    uint32_t flags, uint32_t font, float scale
-);
-// Example arguments (EAX = ptr to utf-8 text):
-// (HELP & OPTIONS), 140, 56, 41400000, 3F800000, FFFFFFFF, 0
-// (GAME SETTINGS), 140, 84, 41400000, 3F800000, FFFFFFFF, 0
-// (CONTROLLER SETTINGS), 140, 9c, 41400000, 402A0000, FFFFFFFF, 0
-// (FRANÇAIS), 198, 138 ,40000000, 3F800000, FFFF7A01, 0
-// (Sign in have been changed), 280, 120, 0, 3F800000, FFFFFFFF, 0
-// (Quit game and return to main menu?), 140, b0, 3F800000, 3F800000, FFFFFFFF, 0
-// Uses global values:
-// :base+3EE774 (float): font x scale
-// :base+3EE83C (float): font y scale
-typedef void (__cdecl write_utf8_font_func_t)(
-    int x, int y, float z, float opacity, uint32_t unknown3, uint32_t unknown4
-);
-// Color in EAX: 0xAARRGGBB
-typedef void (__cdecl draw_rect_func_t)(
-    uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t unknown
-);
-// unknown1 = 3, unknown2 = 1
-// process_objects() deletes previously drawn buttons
-// input: first byte = direction bitmask, second byte = action bitmask
-// input must not contain both directions and actions
-// split input and call draw_pressed_buttons_func_t two times if needed
-typedef void (__cdecl draw_pressed_buttons_func_t)(
-    uint32_t input, uint32_t x, uint32_t y, uint32_t unknown1, uint32_t unknown2
-);
-// Remap action buttons according to player's controller config.
-// mode: 0 (controller), 1-4 (presets). Value doesn't really matter,
-// as long as it's not 0. Passing 0 results in incorrect button mapping.
-// This is due to a bug in GG: set MODE to CONTROLLER and DISPLAY to INPUT,
-// displayed buttons will be incorrect.
-// input registers:
-// * ecx: copy of input
-// * edx: active_object_state* for current player
-// output registers:
-// * eax: result
-typedef uint32_t (__cdecl remap_action_buttons_func_t)(uint32_t mode);
-// This function is doing some useless bit-swapping, but it's required for
-// draw_pressed_buttons_func_t.
-// unknown = 0
-// input registers:
-// * ecx: copy of input
-// output registers:
-// * eax: result
-typedef uint32_t (__cdecl remap_direction_buttons_func_t)(uint32_t input, uint32_t unknown);
-// Draw an arrow icon. For example, DISPLAY option in training mode pause menu.
-// unknown = 2
-typedef void (__cdecl draw_arrow_func_t)(
-    uint32_t arrow_type, uint32_t x, uint32_t y, uint32_t unknown, uint32_t alpha
-);
-void player_status_ticker(const char* message, uint32_t side);
-void process_input();
-void process_objects();
 
 typedef int (fiber_func_t)();
 
@@ -334,16 +221,6 @@ struct projectiles
     active_object_state objects[0x80];
 };
 
-struct directx_obj
-{
-    ptr_chain<data_size<0x20>, 0, 0> vtable1;
-    ptr_chain<data_size<0x20>, 0, 0> vtable2;
-    directx_obj* ptr1;
-    directx_obj* ptr2;
-    uint32_t idx1;
-    uint32_t idx2;
-};
-
 struct match_state
 {
     memory_offset<uint8_t, 0x50f7ec> p1_rounds_won;
@@ -476,8 +353,6 @@ struct game_config
 static_assert(sizeof(game_config::controller_config) == 0x50);
 static_assert(sizeof(game_config) == 0x2b28);
 
-uint16_t reverse_bytes(uint16_t value);
-
 enum class fiber_id : uint32_t
 {
     none1 = 0,
@@ -492,6 +367,79 @@ enum class main_menu_idx : uint32_t
 {
     training = 7
 };
+
+void process_input();
+void process_objects();
+struct input_data;
+void __cdecl get_raw_input_data(input_data* out);
+int32_t limit_fps();
+void game_tick();
+void __stdcall sleep(uint32_t ms);
+struct IXACT3WaveBank;
+struct IXACT3Wave;
+int32_t __stdcall play_sound(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t, IXACT3Wave**);
+typedef int (__cdecl write_cockpit_font_func_t)(const char* buffer, int x, int y, float z, uint8_t alpha, float scale);
+void player_status_ticker(const char* message, uint32_t side);
+// Example arguments:
+// TRAINING MENU, 42000000, 42200000, 40000000, 1, 5, 3f800000
+// PLAYER, 42800000, 42A00000, 40000000, 1, 5, 3F800000
+// ENEMY, 43C00000, 42A00000, 40000000, A0, 5, 3F800000
+// H-SLASH, 42000000, 43480000, 40000000,A0, 7, 3F800000
+// SWITCH, 43830000, 42C00000, 40800000, 1, 6, 3F800000
+// ver R , 44070000 , 43A30000, 41880000, 1, 0x11, 3F000000
+typedef void (__cdecl write_pretty_font_func_t)(
+    const char* text, float x, float y, float z,
+    uint32_t flags, uint32_t font, float scale
+);
+// Example arguments (EAX = ptr to utf-8 text):
+// (HELP & OPTIONS), 140, 56, 41400000, 3F800000, FFFFFFFF, 0
+// (GAME SETTINGS), 140, 84, 41400000, 3F800000, FFFFFFFF, 0
+// (CONTROLLER SETTINGS), 140, 9c, 41400000, 402A0000, FFFFFFFF, 0
+// (FRANÇAIS), 198, 138 ,40000000, 3F800000, FFFF7A01, 0
+// (Sign in have been changed), 280, 120, 0, 3F800000, FFFFFFFF, 0
+// (Quit game and return to main menu?), 140, b0, 3F800000, 3F800000, FFFFFFFF, 0
+// Uses global values:
+// :base+3EE774 (float): font x scale
+// :base+3EE83C (float): font y scale
+typedef void (__cdecl write_utf8_font_func_t)(
+    int x, int y, float z, float opacity, uint32_t unknown3, uint32_t unknown4
+);
+// Color in EAX: 0xAARRGGBB
+typedef void (__cdecl draw_rect_func_t)(
+    uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t unknown
+);
+// unknown1 = 3, unknown2 = 1
+// process_objects() deletes previously drawn buttons
+// input: first byte = direction bitmask, second byte = action bitmask
+// input must not contain both directions and actions
+// split input and call draw_pressed_buttons_func_t two times if needed
+typedef void (__cdecl draw_pressed_buttons_func_t)(
+    uint32_t input, uint32_t x, uint32_t y, uint32_t unknown1, uint32_t unknown2
+);
+// Remap action buttons according to player's controller config.
+// mode: 0 (controller), 1-4 (presets). Value doesn't really matter,
+// as long as it's not 0. Passing 0 results in incorrect button mapping.
+// This is due to a bug in GG: set MODE to CONTROLLER and DISPLAY to INPUT,
+// displayed buttons will be incorrect.
+// input registers:
+// * ecx: copy of input
+// * edx: active_object_state* for current player
+// output registers:
+// * eax: result
+typedef uint32_t (__cdecl remap_action_buttons_func_t)(uint32_t mode);
+// This function is doing some useless bit-swapping, but it's required for
+// draw_pressed_buttons_func_t.
+// unknown = 0
+// input registers:
+// * ecx: copy of input
+// output registers:
+// * eax: result
+typedef uint32_t (__cdecl remap_direction_buttons_func_t)(uint32_t input, uint32_t unknown);
+// Draw an arrow icon. For example, DISPLAY option in training mode pause menu.
+// unknown = 2
+typedef void (__cdecl draw_arrow_func_t)(
+    uint32_t arrow_type, uint32_t x, uint32_t y, uint32_t unknown, uint32_t alpha
+);
 
 struct gg_state
 {
@@ -540,34 +488,10 @@ struct gg_state
     memory_offset<main_menu_idx, 0x5557B0> main_menu_idx;
 };
 
+extern char* g_image_base;
+extern bool g_capture_game_state;
 extern gg_state g_state;
 extern gg_state g_state_orig;
-
-void EnableDrawing(bool enable);
-
-void EnableRoundEndCondition(bool enable);
-
-// untested, but should work
-void EnablePauseMenu(bool enable);
-
-namespace memory_hook
-{
-
-extern bool g_capture;
-HLOCAL WINAPI LocalFree(HLOCAL hMem);
-HLOCAL WINAPI LocalAlloc(UINT uFlags, SIZE_T uBytes);
-
-}
-
-extern bool g_enable_fps_limit;
-
-void apply_patches(char* image_base);
-
-extern "C" __declspec(dllexport) void libgg_init();
-
-bool in_match();
-
-void queue_destroy_fibers();
 
 using history_t = std::tuple<
     match_state,
@@ -575,83 +499,36 @@ using history_t = std::tuple<
     input_data
 >;
 
+// doesn't revert input_data
+void revert_state(history_t& state);
+void save_current_state(const input_data& input, history_t& state);
+
+uint16_t reverse_bytes(uint16_t value);
+
+void enable_drawing(bool enable);
+
+void enable_round_end_condition(bool enable);
+
+// untested, but should work
+void enable_pause_menu(bool enable);
+
+extern bool g_enable_fps_limit;
+
+void apply_patches(char* image_base);
+
+extern "C" __declspec(dllexport) void libgg_init();
+
+const game_config& get_game_config();
+
+bool in_match();
+
+void queue_destroy_fibers();
+
 // set palette reset bit
 // current palette may be incorrect after rollback
 // (lightning / fire effect)
 // call this function after any kind of time travel
 void set_pallette_reset_bit(history_t& state);
-
-// rec player = rec / stop recording
-// rec enemy = stop world
-// play memory = play / stop playing
-// enemy walk = reverse, twice = max speed reverse
-// enemy jump = forward, twice = max speed forward
-// reset = reset current input
-void __cdecl get_raw_input_data(input_data* out);
-
-int32_t limit_fps();
-
-void game_tick();
-
-// -----------------------------------------------------------------------------
-// XACT State flags
-// -----------------------------------------------------------------------------
-static const DWORD XACT_STATE_CREATED           = 0x00000001; // Created, but nothing else
-static const DWORD XACT_STATE_PREPARING         = 0x00000002; // In the middle of preparing
-static const DWORD XACT_STATE_PREPARED          = 0x00000004; // Prepared, but not yet played
-static const DWORD XACT_STATE_PLAYING           = 0x00000008; // Playing (though could be paused)
-static const DWORD XACT_STATE_STOPPING          = 0x00000010; // Stopping
-static const DWORD XACT_STATE_STOPPED           = 0x00000020; // Stopped
-static const DWORD XACT_STATE_PAUSED            = 0x00000040; // Paused (Can be combined with some of the other state flags above)
-static const DWORD XACT_STATE_INUSE             = 0x00000080; // Object is in use (used by wavebanks and soundbanks).
-static const DWORD XACT_STATE_PREPAREFAILED     = 0x80000000; // Object preparation failed.
-
-struct XACT3Wave : public IXACT3Wave
-{
-    STDMETHOD(Destroy)(THIS)
-    {
-        return S_OK;
-    }
-    STDMETHOD(Play)(THIS)
-    {
-        return S_OK;
-    }
-    STDMETHOD(Stop)(THIS_ DWORD dwFlags)
-    {
-        return S_OK;
-    }
-    STDMETHOD(Pause)(THIS_ BOOL fPause)
-    {
-        return S_OK;
-    }
-    STDMETHOD(GetState)(THIS_ __out DWORD* pdwState)
-    {
-        *pdwState = XACT_STATE_STOPPED;
-        return S_OK;
-    }
-    STDMETHOD(SetPitch)(THIS_ SHORT pitch)
-    {
-        return S_OK;
-    }
-    STDMETHOD(SetVolume)(THIS_ FLOAT volume)
-    {
-        return S_OK;
-    }
-    STDMETHOD(SetMatrixCoefficients)(THIS_ UINT32 uSrcChannelCount, UINT32 uDstChannelCount, __in float* pMatrixCoefficients)
-    {
-        return S_OK;
-    }
-    STDMETHOD(GetProperties)(THIS_ __out LPXACT_WAVE_INSTANCE_PROPERTIES pProperties)
-    {
-        return S_OK;
-    }
-};
-
-int32_t __stdcall play_sound(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_t a4, int8_t a5, IXACT3Wave** a6);
-
-void player_status_ticker(const char* message, uint32_t side);
-
-void process_input();
 
 template<size_t N, std::enable_if_t<(N > 1)>* = nullptr>
 std::pair<char*, std::errc> format_int(char (&buffer)[N], int value, int pad = 3, char pad_c = ' ')
@@ -689,5 +566,3 @@ void draw_rect(uint32_t color, uint32_t x1, uint32_t y1,
 uint32_t remap_action_buttons(uint32_t input, const active_object_state* obj);
 
 uint32_t remap_direction_buttons(uint32_t input);
-
-void process_objects();

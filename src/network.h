@@ -5,12 +5,15 @@
 namespace network
 {
 
-void start();
-void stop();
-void process_input(const input_data& input);
-// TODO:
-// gg calls sleep is called before Present(),
-// but it must be called before process_input, process_objects etc
-void game_tick_end(char game_state, int idle_timeout_ms);
+void start_session();
+void close_session();
+
+namespace callbacks
+{
+bool raw_input_data(input_data& input);
+bool sleep(uint32_t ms);
+bool game_tick_end();
+bool play_sound(const IXACT3WaveBank* bank, int16_t sound_id);
+}
 
 }
