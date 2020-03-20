@@ -360,7 +360,8 @@ enum class fiber_id : uint32_t
     title = 9,
     movie = 45,
     main_menu = 0x19,
-    charselect = 0xf
+    charselect = 0xf,
+    match = 6
 };
 
 enum class main_menu_idx : uint32_t
@@ -489,7 +490,6 @@ struct gg_state
 };
 
 extern char* g_image_base;
-extern bool g_capture_game_state;
 extern gg_state g_state;
 extern gg_state g_state_orig;
 
@@ -523,6 +523,8 @@ const game_config& get_game_config();
 bool in_match();
 
 void queue_destroy_fibers();
+
+bool find_fiber_by_name(const std::string& name);
 
 // set palette reset bit
 // current palette may be incorrect after rollback

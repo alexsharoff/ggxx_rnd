@@ -258,8 +258,22 @@ void enable_pause_menu(bool enable)
 size_t g_vs_2p_jmp_addr = 0;
 void __declspec(naked) jmp_menu_network()
 {
-    network::start_session();
     __asm {
+        push eax
+        push ebx
+        push ecx
+        push edx
+        push esi
+        push edi
+    }
+    network::activate();
+    __asm {
+        pop edi
+        pop esi
+        pop edx
+        pop ecx
+        pop ebx
+        pop eax
         jmp g_vs_2p_jmp_addr
     }
 }
@@ -316,14 +330,20 @@ extern "C" __declspec(dllexport) void libgg_init()
     }
 }
 
-bool g_invalidate_menu_fibers = true;
+bool g_invalidate_fiber_data = true;
+void invalidate_fiber_data()
+{
+    if (g_invalidate_fiber_data)
+    {
+        load(g_image_base, g_state.next_fiber_id);
+        load(g_image_base, g_state.menu_fibers);
+        g_invalidate_fiber_data = false;
+    }
+}
+
 bool in_match()
 {
-    if (g_invalidate_menu_fibers)
-    {
-        load(g_image_base, g_state.menu_fibers);
-        g_invalidate_menu_fibers = false;
-    }
+    invalidate_fiber_data();
     const auto& fibers = g_state.menu_fibers.get();
     for (const auto& f : fibers)
     {
@@ -332,16 +352,12 @@ bool in_match()
         if (f.status)
             return false;
     }
-    return true;
+    return g_state.next_fiber_id == fiber_id::match;
 }
 
 void queue_destroy_fibers()
 {
-    if (g_invalidate_menu_fibers)
-    {
-        load(g_image_base, g_state.menu_fibers);
-        g_invalidate_menu_fibers = false;
-    }
+    invalidate_fiber_data();
     auto& fibers = g_state.menu_fibers.get();
     for (auto& f : fibers)
     {
@@ -349,6 +365,18 @@ void queue_destroy_fibers()
             f.status = 3;
     }
     dump(g_state.menu_fibers, g_image_base);
+}
+
+bool find_fiber_by_name(const std::string& name)
+{
+    invalidate_fiber_data();
+    const auto& fibers = g_state.menu_fibers.get();
+    for (const auto& f : fibers)
+    {
+        if (f.name == name)
+            return true;
+    }
+    return false;
 }
 
 std::deque<history_t> g_history;
@@ -394,8 +422,6 @@ void save_current_state(const input_data& input, history_t& state)
     std::get<2>(state) = input;
 }
 
-bool g_capture_game_state = true;
-
 // rec player = rec / stop recording
 // rec enemy = stop world
 // play memory = play / stop playing
@@ -410,21 +436,14 @@ void __cdecl get_raw_input_data(input_data* out)
     f(&input);
     //std::swap(input.keys[0], input.keys[1]);
 
-    if (g_capture_game_state)
-    {
-        load(g_image_base, g_state.game_mode);
+    if (!network::g_is_active)
         save_current_state(input, g_cur_state);
-    }
-    else
-    {
-        g_cur_state = history_t();
-    }
 
     const auto skip =  network::callbacks::raw_input_data(input);
 
-    auto& p1_char_optional = std::get<0>(g_cur_state).p1_character.get().ptr;
+    load(g_image_base, g_state.game_mode);
     const auto training_mode = g_state.game_mode == 0x101;
-    if (!skip && in_match() && training_mode && p1_char_optional)
+    if (!skip && in_match() && training_mode)
     {
         //memory_hook::g_capture = true;
 
@@ -641,7 +660,7 @@ const game_config& get_game_config()
 bool g_jump_to_menu = true;
 void game_tick()
 {
-    g_invalidate_menu_fibers = true;
+    g_invalidate_fiber_data = true;
     g_invalidate_game_config = true;
     if (!g_state.play_sound.get().ptr)
     {
@@ -671,6 +690,8 @@ void game_tick()
             g_jump_to_menu = false;
         }
     }
+
+    network::callbacks::game_tick_begin();
 
     const auto f = *g_state_orig.game_tick.get().get();
     f();

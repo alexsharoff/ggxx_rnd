@@ -23,28 +23,49 @@ namespace network
 GGPOSession* g_session = nullptr;
 GGPOPlayerHandle g_player_handles[2];
 bool g_call_ggpo_idle_manually = true;
-std::unordered_map<const IXACT3WaveBank*, std::unordered_set<int16_t>> g_heard_sounds;
+struct pair_hash
+{
+    template<class T1, class T2>
+    std::size_t operator() (const std::pair<T1, T2>& pair) const
+    {
+        return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
+    }
+};
+using sound_set_t = std::unordered_set<std::pair<const IXACT3WaveBank*, int16_t>, pair_hash>;
+std::unordered_map<size_t, sound_set_t> g_heard_sounds;
+bool g_during_match = false;
+bool g_replaying_input = false;
+bool g_is_active = false;
+size_t g_frame = 0;
+bool g_is_waiting = false;
+
+void activate()
+{
+    g_is_active = true;
+    g_is_waiting = true;
+}
 
 bool begin_game(const char*)
 {
+    std::cout << "begin_game" << std::endl;
     return true;
 }
 
-int g_counter = 0;
 bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 {
     *buffer = new unsigned char[4];
-    const auto begin = (unsigned char*)&g_counter;
+    const auto begin = (unsigned char*)&g_frame;
     std::copy(begin, begin + 4, *buffer);
-    ++g_counter;
     *len = 4;
-    std::cout << "save_game_state" << std::endl;
+    *checksum = g_frame;
+    std::cout << "save_game_state: " << g_frame << std::endl;
     return true;
 }
 
 bool load_game_state(unsigned char *buffer, int len)
 {
-    std::cout << "load_game_state" << std::endl;
+    g_frame = *(size_t*)buffer;
+    std::cout << "load_game_state: " << g_frame <<  std::endl;
     return true;
 }
 
@@ -55,24 +76,71 @@ bool log_game_state(char *filename, unsigned char *buffer, int len)
 
 void free_buffer(void *buffer)
 {
+    if (!buffer)
+        return;
+    const auto frame = *(size_t*)buffer;
+    std::cout << "free_buffer: " << frame <<  std::endl;
+    auto found = g_heard_sounds.find(frame);
+    if (found != g_heard_sounds.end())
+        g_heard_sounds.erase(found);
+
     // Free'd all buffers => enable_round_end_condition(true)
     delete[] buffer;
 }
 
 bool advance_frame(int)
 {
+    std::cout << "advance_frame" <<  std::endl;
     enable_drawing(false);
-    g_capture_game_state = false;
+    g_replaying_input = true;
     ::game_tick();
     enable_drawing(true);
-    g_capture_game_state = true;
+    g_replaying_input = false;
     return true;
 }
 
 bool on_event(GGPOEvent *info)
 {
-    std::cout << info->code << std::endl;
+    std::cout << "event: " << info->code << std::endl;
     return true;
+}
+
+void on_match_start()
+{
+    std::cout << "on_match_start" << std::endl;
+
+    // ggpo_idle() must be called instead of Sleep().
+    // In Steam release Sleep() is called just before IDirect3D::Present,
+    // but sometimes it's skipped, which is a problem.
+    // To be consistent with recommended implementation (VectorWar),
+    // ggpo_idle() should be called at the beginning of game tick,
+    // or at least before doing any processing for current frame.
+    // TODO: research, will this change game timing?
+    // 
+    // This disables limit_fps() function when it's called by the game.
+    // We will call it manually after getting current input data.
+    g_enable_fps_limit = false;
+
+    // Round end condition should be enabled only after we confirm
+    // last input from the remote side.
+    enable_round_end_condition(false);
+
+    enable_pause_menu(false);
+
+    g_during_match = true;
+    g_call_ggpo_idle_manually = true;
+    g_frame = 0;
+}
+
+void on_match_end()
+{
+    std::cout << "on_match_end" << std::endl;
+
+    g_enable_fps_limit = true;
+    enable_round_end_condition(true);
+    enable_pause_menu(true);
+    g_during_match = false;
+    g_heard_sounds.clear();
 }
 
 void start_session()
@@ -91,37 +159,27 @@ void start_session()
     GGPO_CHECK(ggpo_start_synctest(&g_session, &callbacks, "GGXX", 2, 2, 1));
 
     GGPOPlayer player;
-    player.player_num = 0;
+    player.player_num = 1;
     player.type = GGPO_PLAYERTYPE_LOCAL;
     player.size = sizeof(GGPOPlayer);
     GGPO_CHECK(ggpo_add_player(g_session, &player, &g_player_handles[0]));
-    player.player_num = 1;
+    player.player_num++;
     GGPO_CHECK(ggpo_add_player(g_session, &player, &g_player_handles[1]));
 
-    GGPO_CHECK(ggpo_set_frame_delay(g_session, g_player_handles[0], 0));
-    GGPO_CHECK(ggpo_set_frame_delay(g_session, g_player_handles[1], 0));
+    // ggpo_start_synctest doesn't suppot delay
+    //GGPO_CHECK(ggpo_set_frame_delay(g_session, g_player_handles[0], 6));
+    //GGPO_CHECK(ggpo_set_frame_delay(g_session, g_player_handles[1], 6));
 
     //ggpo_set_disconnect_notify_start(g_session, 1000);
     //ggpo_set_disconnect_timeout(g_session, 10000);
 
-    // ggpo_idle() must be called instead of Sleep().
-    // In Steam release Sleep() is called just before IDirect3D::Present,
-    // but sometimes it's skipped, which is a problem.
-    // To be consistent with recommended implementation (VectorWar),
-    // ggpo_idle() should be called at the beginning of game tick,
-    // or at least before doing any processing for current frame.
-    // TODO: research, will this change game timing?
-    // 
-    // This disables limit_fps() function when it's called by the game.
-    // We will call it manually after getting current input data.
-    g_enable_fps_limit = false;
-
-    // Round end condition should be enabled only after we receive
-    // last input from the remote side.
-    enable_round_end_condition(false);
-
-    // During rollback, don't play sound that were already heard 
+    // During rollback, don't play sounds that were already heard 
     g_heard_sounds.clear();
+
+    g_during_match = false;
+    g_is_waiting = true;
+
+    std::cout << "start_session" << std::endl;
 }
 
 void close_session()
@@ -131,6 +189,8 @@ void close_session()
         GGPO_CHECK(ggpo_close_session(g_session));
         g_session = nullptr;
     }
+
+    std::cout << "close_session" << std::endl;
 }
 
 namespace callbacks
@@ -138,17 +198,22 @@ namespace callbacks
 
 bool raw_input_data(input_data& input)
 {
-    if (!g_session)
+    if (!g_session || !g_during_match)
         return false;
 
-    g_enable_fps_limit = true;
-    limit_fps();
-    g_enable_fps_limit = false;
+    std::cout << "raw_input_data" <<  std::endl;
+
+    if (!g_replaying_input)
+    {
+        g_enable_fps_limit = true;
+        limit_fps();
+        g_enable_fps_limit = false;
+    }
 
     if (g_call_ggpo_idle_manually)
         GGPO_CHECK(ggpo_idle(g_session, 1));
-    else
-        g_call_ggpo_idle_manually = true;
+
+    g_call_ggpo_idle_manually = true;
 
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[0], (void*)&input.keys[0], 2));
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[1], (void*)&input.keys[1], 2));
@@ -159,10 +224,54 @@ bool raw_input_data(input_data& input)
     return true;
 }
 
+bool game_tick_begin()
+{
+    if (!g_is_active)
+        return false;
+
+    if (in_match())
+    {
+        g_is_waiting = false;
+        if (!g_during_match)
+        {
+            start_session();
+            std::cout << "game_tick_begin: on_match_start" <<  std::endl;
+            on_match_start();
+        }
+    }
+    else
+    {
+        if (!g_replaying_input)
+        {
+            if(g_during_match)
+            {
+                std::cout << "game_tick_begin: on_match_end" <<  std::endl;
+                on_match_end();
+                close_session();
+            }
+
+            // Exited from VS 2P
+            if (!g_is_waiting && (find_fiber_by_name("OPTION")))
+            {
+                std::cout << "game_tick_begin: close_session" <<  std::endl;
+                on_match_end();
+                close_session();
+                g_is_active = false;
+            }
+        }
+    }
+
+    return g_session != nullptr;
+}
+
 bool game_tick_end()
 {
-    if (!g_session)
+    if (!g_session || !g_during_match)
         return false;
+
+    std::cout << "game_tick_end" <<  std::endl;
+
+    ++g_frame;
 
     GGPO_CHECK(ggpo_advance_frame(g_session));
 
@@ -171,8 +280,12 @@ bool game_tick_end()
 
 bool sleep(uint32_t ms)
 {
-    if (!g_session)
+    if (!g_session || !g_during_match)
         return false;
+
+    std::cout << "sleep" <<  std::endl;
+
+    assert(!g_replaying_input);
 
     using std::chrono::steady_clock;
     const auto idle_begin = steady_clock::now();
@@ -190,13 +303,14 @@ bool sleep(uint32_t ms)
     return true;
 }
 
-// Stub implementation: play each sound once
 bool play_sound(const IXACT3WaveBank* bank, int16_t sound_id)
 {
-    if (!g_session)
+    if (!g_session || !g_during_match)
         return false;
 
-    auto [_, success] = g_heard_sounds[bank].insert(sound_id);
+    std::cout << "play_sound" <<  std::endl;
+
+    auto [_, success] = g_heard_sounds[g_frame].insert({bank, sound_id});
     if (success)
         return false;
 
