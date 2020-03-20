@@ -37,12 +37,12 @@ bool g_during_match = false;
 bool g_replaying_input = false;
 bool g_is_active = false;
 size_t g_frame = 0;
-bool g_is_waiting = false;
+bool g_waiting_for_first_match = false;
 
 void activate()
 {
     g_is_active = true;
-    g_is_waiting = true;
+    g_waiting_for_first_match = true;
 }
 
 bool begin_game(const char*)
@@ -177,7 +177,7 @@ void start_session()
     g_heard_sounds.clear();
 
     g_during_match = false;
-    g_is_waiting = true;
+    g_waiting_for_first_match = true;
 
     std::cout << "start_session" << std::endl;
 }
@@ -215,6 +215,7 @@ bool raw_input_data(input_data& input)
 
     g_call_ggpo_idle_manually = true;
 
+    // TODO: remap buttons to configuration-independent state before saving
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[0], (void*)&input.keys[0], 2));
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[1], (void*)&input.keys[1], 2));
     int disconnected = 0;
@@ -231,7 +232,7 @@ bool game_tick_begin()
 
     if (in_match())
     {
-        g_is_waiting = false;
+        g_waiting_for_first_match = false;
         if (!g_during_match)
         {
             start_session();
@@ -251,7 +252,7 @@ bool game_tick_begin()
             }
 
             // Exited from VS 2P
-            if (!g_is_waiting && (find_fiber_by_name("OPTION")))
+            if (!g_waiting_for_first_match && find_fiber_by_name("OPTION"))
             {
                 std::cout << "game_tick_begin: close_session" <<  std::endl;
                 on_match_end();
