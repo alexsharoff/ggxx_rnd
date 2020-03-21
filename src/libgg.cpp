@@ -356,6 +356,18 @@ bool in_match()
     return g_state.next_fiber_id == fiber_id::match;
 }
 
+bool in_training_mode()
+{
+    load(g_image_base, g_state.game_mode);
+    return g_state.game_mode == 0x101 || g_state.game_mode == 0x102;
+}
+
+uint32_t get_active_players()
+{
+    load(g_image_base, g_state.game_mode);
+    return g_state.game_mode & 0x3;
+}
+
 void queue_destroy_fibers()
 {
     invalidate_fiber_data();
@@ -459,9 +471,7 @@ void __cdecl get_raw_input_data(input_data* out)
 
     const auto skip =  network::callbacks::raw_input_data(input);
 
-    load(g_image_base, g_state.game_mode);
-    const auto training_mode = g_state.game_mode == 0x101;
-    if (!skip && in_match() && training_mode)
+    if (!skip && in_match() && in_training_mode())
     {
         //memory_hook::g_capture = true;
 
@@ -965,20 +975,24 @@ void process_objects()
         g_state.write_cockpit_font("OUT OF MEMORY!", 50, 150, 1, 0xff, 1);
     }
 
-    const auto training_mode = g_state.game_mode == 0x101;
     const auto is_paused = std::get<0>(g_cur_state).pause_state.get();
     const auto display_damage = std::get<0>(g_cur_state).training_mode_cfg_display.get() & 2;
-    if (in_match() && training_mode && !is_paused && display_damage)
+    if (in_match() && in_training_mode() && !is_paused && display_damage)
     {
         load(g_image_base, ms.character_state);
-        const auto& p2_char_state = ms.character_state.get()[1];
-        const auto stun_accumulator = p2_char_state.stun_accumulator;
-        const auto stun_resistance = p2_char_state.stun_resistance;
-        const auto faint_countdown = p2_char_state.faint_countdown;
+        auto player_idx = get_active_players();
+        if (player_idx == 2)
+            player_idx = 0;
+        else
+            player_idx = 1;
+        const auto& enemy_char_state = ms.character_state.get()[player_idx];
+        const auto stun_accumulator = enemy_char_state.stun_accumulator;
+        const auto stun_resistance = enemy_char_state.stun_resistance;
+        const auto faint_countdown = enemy_char_state.faint_countdown;
 
         const int increment_y = 0x18;
-        const int key_x = 0x16a;
-        const int value_x = 0x21a;
+        const int key_x = player_idx ? 0x16a : 0x2a;
+        const int value_x = player_idx ? 0x21a : 0xda;
         const float key_z = 265;
         const float value_z = 266;
         int y = 0xb8;

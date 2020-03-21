@@ -473,12 +473,12 @@ struct gg_state
     memory_offset<mersenne_twister, 0x565F20> rng;
     /*
     vs 2p: 0x803
-    training: 0x101
-    vp cpu: 0x2001
+    training: 0x101 / 0x102
+    vp cpu: 0x2001 / 0x2002
     vs 2p team: 0x40803
-    vs cpu team: 0x42001
-    arcade/mom: 1
-    survival 0x201
+    vs cpu team: 0x42001 / 0x 42002
+    arcade/mom: 1 / 2
+    survival 0x201 / 0x202
     */
     memory_offset<uint32_t, 0x51B8CC> game_mode;
     memory_offset<game_config, 0x5134D8> config;
@@ -523,6 +523,8 @@ extern "C" __declspec(dllexport) void libgg_init();
 const game_config& get_game_config();
 
 bool in_match();
+bool in_training_mode();
+uint32_t get_active_players();
 
 void queue_destroy_fibers();
 
