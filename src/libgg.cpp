@@ -12,6 +12,7 @@
 
 #include <deque>
 #include <string>
+#include <utility>
 
 using mini_reflection::reflect;
 using mini_reflection::member_tuple;
@@ -422,6 +423,23 @@ void save_current_state(const input_data& input, history_t& state)
     std::get<2>(state) = input;
 }
 
+// TODO: implement proper (mini_reflection::for_each_member)
+uint32_t state_checksum(const history_t& state)
+{
+    const auto& ms = std::get<0>(state);
+    const auto& rng = std::get<1>(state).get();
+    const auto& p1 = ms.p1_character.get().ptr.value();
+    const auto& p2 = ms.p2_character.get().ptr.value();
+    auto& p1_char_state = ms.character_state.get()[0];
+    auto& p2_char_state = ms.character_state.get()[1];
+    return std::hash<uint16_t>{}(p1.health) ^
+        std::hash<uint16_t>{}(p2.health) ^
+        std::hash<uint16_t>{}(p1_char_state.stun_accumulator) ^
+        std::hash<uint16_t>{}(p2_char_state.stun_accumulator) ^
+        std::hash<uint64_t>{}(rng.index) ^
+        std::hash<uint64_t>{}(rng.data[rng.index]);
+}
+
 // rec player = rec / stop recording
 // rec enemy = stop world
 // play memory = play / stop playing
@@ -691,7 +709,8 @@ void game_tick()
         }
     }
 
-    network::callbacks::game_tick_begin();
+    if(network::callbacks::game_tick_begin())
+        return;
 
     const auto f = *g_state_orig.game_tick.get().get();
     f();

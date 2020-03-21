@@ -496,12 +496,14 @@ extern gg_state g_state_orig;
 using history_t = std::tuple<
     match_state,
     decltype(g_state.rng),
-    input_data
+    input_data,
+    size_t // frame number
 >;
 
 // doesn't revert input_data
 void revert_state(history_t& state);
 void save_current_state(const input_data& input, history_t& state);
+uint32_t state_checksum(const history_t& state);
 
 uint16_t reverse_bytes(uint16_t value);
 

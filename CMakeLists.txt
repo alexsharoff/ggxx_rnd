@@ -31,6 +31,7 @@ add_library(libgg SHARED
     src/patch_iat.cpp
 )
 target_link_libraries(libgg dbghelp GGPO)
+#target_compile_definitions(libgg PRIVATE LIBGG_DBGPRINT)
 
 add_subdirectory(src/steam_api_nop)
 

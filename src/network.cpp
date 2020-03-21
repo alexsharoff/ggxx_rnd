@@ -2,8 +2,10 @@
 
 #include <ggponet.h>
 
+#include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -16,6 +18,28 @@
             throw std::logic_error("ggpo error"); \
         } \
     } while(false)
+
+#pragma once
+
+#include <Windows.h>
+
+#ifdef LIBGG_DBGPRINT
+#define LIBGG_LOG() std::cout
+#else
+namespace
+{
+struct dev_null_t
+{
+    template<typename T>
+    dev_null_t& operator<<(const T&) { return *this; }
+    template<typename T, size_t N>
+    dev_null_t& operator<<(const T(&)[N]) { return *this; }
+    // for std::endl et al.
+    dev_null_t& operator<<(std::ostream&(*)(std::ostream&)) { return *this; }
+} g_dev_null;
+}
+#define LIBGG_LOG() g_dev_null
+#endif
 
 namespace network
 {
@@ -47,25 +71,31 @@ void activate()
 
 bool begin_game(const char*)
 {
-    std::cout << "begin_game" << std::endl;
+    LIBGG_LOG() << "begin_game" << std::endl;
     return true;
 }
 
 bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 {
-    *buffer = new unsigned char[4];
-    const auto begin = (unsigned char*)&g_frame;
-    std::copy(begin, begin + 4, *buffer);
-    *len = 4;
-    *checksum = g_frame;
-    std::cout << "save_game_state: " << g_frame << std::endl;
+    LIBGG_LOG() << "save_game_state" << std::endl;
+
+    auto state_ptr = new history_t{};
+    save_current_state(input_data(), *state_ptr);
+    assert(g_frame == frame);
+    std::get<3>(*state_ptr) = g_frame;
+
+    *buffer = (unsigned char*)state_ptr;
+    *len = sizeof(history_t);
+    *checksum = state_checksum(*state_ptr);
     return true;
 }
 
 bool load_game_state(unsigned char *buffer, int len)
 {
-    g_frame = *(size_t*)buffer;
-    std::cout << "load_game_state: " << g_frame <<  std::endl;
+    LIBGG_LOG() << "load_game_state" << std::endl;
+    auto state_ptr = (history_t*)(buffer);
+    revert_state(*state_ptr);
+    g_frame = std::get<3>(*state_ptr);
     return true;
 }
 
@@ -78,19 +108,16 @@ void free_buffer(void *buffer)
 {
     if (!buffer)
         return;
-    const auto frame = *(size_t*)buffer;
-    std::cout << "free_buffer: " << frame <<  std::endl;
-    auto found = g_heard_sounds.find(frame);
-    if (found != g_heard_sounds.end())
-        g_heard_sounds.erase(found);
+
+    LIBGG_LOG() << "free_buffer" <<  std::endl;
 
     // Free'd all buffers => enable_round_end_condition(true)
-    delete[] buffer;
+    delete buffer;
 }
 
 bool advance_frame(int)
 {
-    std::cout << "advance_frame" <<  std::endl;
+    LIBGG_LOG() << "advance_frame" <<  std::endl;
     enable_drawing(false);
     g_replaying_input = true;
     ::game_tick();
@@ -101,13 +128,13 @@ bool advance_frame(int)
 
 bool on_event(GGPOEvent *info)
 {
-    std::cout << "event: " << info->code << std::endl;
+    LIBGG_LOG() << "event: " << info->code << std::endl;
     return true;
 }
 
 void on_match_start()
 {
-    std::cout << "on_match_start" << std::endl;
+    LIBGG_LOG() << "on_match_start" << std::endl;
 
     // ggpo_idle() must be called instead of Sleep().
     // In Steam release Sleep() is called just before IDirect3D::Present,
@@ -134,7 +161,7 @@ void on_match_start()
 
 void on_match_end()
 {
-    std::cout << "on_match_end" << std::endl;
+    LIBGG_LOG() << "on_match_end" << std::endl;
 
     g_enable_fps_limit = true;
     enable_round_end_condition(true);
@@ -156,7 +183,7 @@ void start_session()
     callbacks.log_game_state = log_game_state;
     callbacks.on_event = on_event;
     callbacks.save_game_state = save_game_state;
-    GGPO_CHECK(ggpo_start_synctest(&g_session, &callbacks, "GGXX", 2, 2, 1));
+    GGPO_CHECK(ggpo_start_synctest(&g_session, &callbacks, "GGXX", 2, 2, 8));
 
     GGPOPlayer player;
     player.player_num = 1;
@@ -179,7 +206,7 @@ void start_session()
     g_during_match = false;
     g_waiting_for_first_match = true;
 
-    std::cout << "start_session" << std::endl;
+    LIBGG_LOG() << "start_session" << std::endl;
 }
 
 void close_session()
@@ -190,7 +217,7 @@ void close_session()
         g_session = nullptr;
     }
 
-    std::cout << "close_session" << std::endl;
+    LIBGG_LOG() << "close_session" << std::endl;
 }
 
 namespace callbacks
@@ -201,7 +228,7 @@ bool raw_input_data(input_data& input)
     if (!g_session || !g_during_match)
         return false;
 
-    std::cout << "raw_input_data" <<  std::endl;
+    LIBGG_LOG() << "raw_input_data" <<  std::endl;
 
     if (!g_replaying_input)
     {
@@ -227,8 +254,13 @@ bool raw_input_data(input_data& input)
 
 bool game_tick_begin()
 {
+    return false;
+}
+
+void game_tick_end()
+{
     if (!g_is_active)
-        return false;
+        return;
 
     if (in_match())
     {
@@ -236,8 +268,14 @@ bool game_tick_begin()
         if (!g_during_match)
         {
             start_session();
-            std::cout << "game_tick_begin: on_match_start" <<  std::endl;
+            LIBGG_LOG() << "game_tick_end: on_match_start" <<  std::endl;
             on_match_start();
+        }
+        else
+        {
+            LIBGG_LOG() << "game_tick_end: advance_frame" <<  std::endl;
+            ++g_frame;
+            GGPO_CHECK(ggpo_advance_frame(g_session));
         }
     }
     else
@@ -246,7 +284,7 @@ bool game_tick_begin()
         {
             if(g_during_match)
             {
-                std::cout << "game_tick_begin: on_match_end" <<  std::endl;
+                LIBGG_LOG() << "game_tick_end: on_match_end" <<  std::endl;
                 on_match_end();
                 close_session();
             }
@@ -254,29 +292,13 @@ bool game_tick_begin()
             // Exited from VS 2P
             if (!g_waiting_for_first_match && find_fiber_by_name("OPTION"))
             {
-                std::cout << "game_tick_begin: close_session" <<  std::endl;
+                LIBGG_LOG() << "game_tick_end: close_session" <<  std::endl;
                 on_match_end();
                 close_session();
                 g_is_active = false;
             }
         }
     }
-
-    return g_session != nullptr;
-}
-
-bool game_tick_end()
-{
-    if (!g_session || !g_during_match)
-        return false;
-
-    std::cout << "game_tick_end" <<  std::endl;
-
-    ++g_frame;
-
-    GGPO_CHECK(ggpo_advance_frame(g_session));
-
-    return true;
 }
 
 bool sleep(uint32_t ms)
@@ -284,7 +306,7 @@ bool sleep(uint32_t ms)
     if (!g_session || !g_during_match)
         return false;
 
-    std::cout << "sleep" <<  std::endl;
+    LIBGG_LOG() << "sleep" <<  std::endl;
 
     assert(!g_replaying_input);
 
@@ -309,7 +331,7 @@ bool play_sound(const IXACT3WaveBank* bank, int16_t sound_id)
     if (!g_session || !g_during_match)
         return false;
 
-    std::cout << "play_sound" <<  std::endl;
+    LIBGG_LOG() << "play_sound" <<  std::endl;
 
     auto [_, success] = g_heard_sounds[g_frame].insert({bank, sound_id});
     if (success)
