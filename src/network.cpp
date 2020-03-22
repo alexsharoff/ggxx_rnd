@@ -242,12 +242,26 @@ bool raw_input_data(input_data& input)
 
     g_call_ggpo_idle_manually = true;
 
-    // TODO: remap buttons to configuration-independent state before saving
+    const auto& controller_configs = get_game_config().player_controller_config;
+    input.keys[0] = remap_buttons(
+        input.keys[0], controller_configs[0], game_config::default_controller_config
+    );
+    input.keys[1] = remap_buttons(
+        input.keys[1], controller_configs[1], game_config::default_controller_config
+    );
+
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[0], (void*)&input.keys[0], 2));
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[1], (void*)&input.keys[1], 2));
     int disconnected = 0;
     input = input_data();
     GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)input.keys, 4, &disconnected));
+
+    input.keys[0] = remap_buttons(
+        input.keys[0], game_config::default_controller_config, controller_configs[0]
+    );
+    input.keys[1] = remap_buttons(
+        input.keys[1], game_config::default_controller_config, controller_configs[1]
+    );
 
     return true;
 }

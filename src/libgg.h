@@ -345,6 +345,26 @@ struct game_config
     };
     controller_config player_controller_config[2];
     controller_config controller_config_presets[4];
+    static constexpr controller_config default_controller_config = {
+        {0x8000}, // p
+        {0x4000}, // k
+        {0x1000}, // s
+        {0x2000}, // hs
+        {0x800}, // d
+        {0x200}, // taunt
+        {1}, // reset
+        {8}, // pause
+        {0}, // rec player
+        {0x400}, // rec enemy
+        {0x100}, // play memory
+        {0}, // switch
+        {2}, // enemy walk
+        {4}, // enemy jump
+        {0}, // pk
+        {0}, // pd
+        {0}, // pks
+        {0} // pksh
+    };
 
     uint8_t unknown[0x2948];
 };
@@ -572,3 +592,9 @@ void draw_rect(uint32_t color, uint32_t x1, uint32_t y1,
 uint32_t remap_action_buttons(uint32_t input, const active_object_state* obj);
 
 uint32_t remap_direction_buttons(uint32_t input);
+
+uint16_t remap_buttons(
+    uint16_t input,
+    const game_config::controller_config& from,
+    const game_config::controller_config& to
+);

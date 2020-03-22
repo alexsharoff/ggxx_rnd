@@ -452,6 +452,45 @@ uint32_t state_checksum(const history_t& state)
         std::hash<uint64_t>{}(rng.data[rng.index]);
 }
 
+uint16_t remap_buttons(uint16_t input, 
+                       const game_config::controller_config& from,
+                       const game_config::controller_config& to)
+{
+    input = reverse_bytes(input);
+
+    const auto directions = from.up.bit | from.down.bit |
+                            from.left.bit | from.right.bit;
+    uint16_t result = input & directions;
+
+    if (input & from.pk.bit)
+        input |= from.p.bit | from.k.bit;
+    if (input & from.pd.bit)
+        input |= from.p.bit | from.d.bit;
+    if (input & from.pks.bit)
+        input |= from.p.bit | from.k.bit | from.s.bit;
+    if (input & from.pksh.bit)
+        input |= from.p.bit | from.k.bit | from.s.bit | from.hs.bit;
+
+    if (input & from.p.bit)
+        result |= to.p.bit;
+    if (input & from.k.bit)
+        result |= to.k.bit;
+    if (input & from.s.bit)
+        result |= to.s.bit;
+    if (input & from.hs.bit)
+        result |= to.hs.bit;
+    if (input & from.d.bit)
+        result |= to.d.bit;
+    if (input & from.taunt.bit)
+        result |= to.taunt.bit;
+    if (input & from.reset.bit)
+        result |= to.reset.bit;
+    if (input & from.pause.bit)
+        result |= to.pause.bit;
+
+    return reverse_bytes(result);
+}
+
 // rec player = rec / stop recording
 // rec enemy = stop world
 // play memory = play / stop playing
