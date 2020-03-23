@@ -29,6 +29,7 @@ add_library(libgg SHARED
     src/libgg.cpp
     src/network.cpp
     src/patch_iat.cpp
+    src/fibers.cpp
 )
 target_link_libraries(libgg dbghelp GGPO)
 #target_compile_definitions(libgg PRIVATE LIBGG_DBGPRINT)

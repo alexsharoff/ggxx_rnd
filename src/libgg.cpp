@@ -5,6 +5,7 @@
 #include "mini_reflection.h"
 //#include "binary_serializer.h"
 #include "memory_dump.h"
+#include "fibers.h"
 
 #include "network.h"
 
