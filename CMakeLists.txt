@@ -25,13 +25,17 @@ add_compile_definitions(
 
 include_directories(include)
 
+add_library(libgg.static STATIC
+    src/patch_iat.cpp
+    src/fiber_mgmt.cpp
+)
+target_link_libraries(libgg.static PUBLIC dbghelp)
+
 add_library(libgg SHARED
     src/libgg.cpp
     src/network.cpp
-    src/patch_iat.cpp
-    src/fibers.cpp
 )
-target_link_libraries(libgg dbghelp GGPO)
+target_link_libraries(libgg GGPO libgg.static)
 #target_compile_definitions(libgg PRIVATE LIBGG_DBGPRINT)
 
 add_subdirectory(src/steam_api_nop)
@@ -39,12 +43,15 @@ add_subdirectory(src/steam_api_nop)
 enable_testing()
 
 add_executable(test_mini_reflection test/mini_reflection.cpp)
+add_executable(test_fiber_mgmt test/fiber_mgmt.cpp)
+target_link_libraries(test_fiber_mgmt libgg.static)
 #add_executable(test_memory_dump test/memory_dump.cpp)
 #add_executable(test_diff test/diff.cpp)
 #add_executable(test_binary_serializer test/binary_serializer.cpp)
 #add_executable(test_pretty_print test/pretty_print.cpp)
 
 add_test(NAME mini_reflection COMMAND test_mini_reflection)
+add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
 #add_test(NAME memory_dump COMMAND test_memory_dump)
 #add_test(NAME diff COMMAND test_diff)
 #add_test(NAME binary_serializer COMMAND test_binary_serializer)
