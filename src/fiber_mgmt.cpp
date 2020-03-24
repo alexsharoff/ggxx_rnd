@@ -3,8 +3,13 @@
 #include "patch_iat.h"
 #include "memory_dump.h"
 
+#include <limits>
 #include <string>
 #include <unordered_map>
+
+
+// 64-bit is not supported
+static_assert(sizeof(size_t) == 4);
 
 
 namespace fiber_mgmt
@@ -30,10 +35,7 @@ create_fiber_func_t* g_create_fiber_orig = nullptr;
 LPVOID WINAPI create_fiber_hook(SIZE_T stack_size, LPFIBER_START_ROUTINE func, LPVOID arg)
 {
     LPVOID fiber = g_create_fiber_orig(stack_size, func, arg);
-    assert(g_fiber_map.find(fiber) == g_fiber_map.end());
-    fiber_state::data_ data;
-    load(fiber, data);
-    g_fiber_map[fiber].stack_size = data.stack_end - data.stack_begin + 1;
+    transfer_ownership(fiber);
     return fiber;
 }
 
@@ -100,6 +102,28 @@ void dump_state(LPVOID fiber, const fiber_state& state)
 {
     dump(state.data, fiber);
     std::copy(state.stack.begin(), state.stack.end(), state.data.stack_begin);
+}
+
+void transfer_ownership(LPVOID fiber)
+{
+    assert(g_fiber_map.find(fiber) == g_fiber_map.end());
+    fiber_state::data_ data;
+    load(fiber, data);
+    size_t* end = data.esp;
+    if ((size_t)data.seh_record != std::numeric_limits<size_t>::max())
+    {
+        // If seh_record is valid, it means that SwitchToFiber
+        // was called at least once for current fiber.
+        // In this case ESP no longer points to stack bottom.
+        // 
+        // Let's use SEH record pointer instead of ESP.
+        // It's always near the bottom of the stack and
+        // it's highly inlikely that anything below it
+        // is going to be overwritten during normal fiber
+        // execution.
+        end = data.seh_record;
+    }
+    g_fiber_map[fiber].stack_size = end - data.stack_begin + 1;
 }
 
 void free(LPVOID fiber)

@@ -142,6 +142,72 @@ int test3(LPVOID main_fiber, size_t n)
     return 0;
 }
 
+int test4(LPVOID main_fiber)
+{
+    fiber_arg arg = { false, main_fiber };
+    const auto fiber = ::CreateFiber(0, fiber_f, &arg);
+    fiber_mgmt::fiber_state state;
+    fiber_mgmt::init();
+    fiber_mgmt::transfer_ownership(fiber);
+    fiber_mgmt::load_state(fiber, state);
+    while (!arg.done)
+    {
+        ::SwitchToFiber(fiber);
+    }
+    TEST_EQ(arg.counter, 3);
+
+    // restore previous state
+    fiber_mgmt::dump_state(fiber, state);
+    arg.done = false;
+    // continue fiber execution from previous state
+    while (!arg.done)
+    {
+        ::SwitchToFiber(fiber);
+    }
+    ::DeleteFiber(fiber);
+    TEST_EQ(arg.counter, 6);
+
+    fiber_mgmt::shutdown();
+
+    return 0;
+}
+
+int test5(LPVOID main_fiber)
+{
+    fiber_arg arg = { false, main_fiber };
+    const auto fiber = ::CreateFiber(0, fiber_f, &arg);
+    fiber_mgmt::fiber_state state;
+    bool init = true;
+    while (!arg.done)
+    {
+        ::SwitchToFiber(fiber);
+        if (init)
+        {
+            fiber_mgmt::init();
+            fiber_mgmt::transfer_ownership(fiber);
+            fiber_mgmt::load_state(fiber, state);
+            init = false;
+        }
+    }
+    TEST_EQ(arg.counter, 3);
+
+    // restore previous state
+    fiber_mgmt::dump_state(fiber, state);
+    arg.done = false;
+    // continue fiber execution from previous state
+    while (!arg.done)
+    {
+        ::SwitchToFiber(fiber);
+    }
+    fiber_mgmt::free(fiber);
+    ::DeleteFiber(fiber);
+    TEST_EQ(arg.counter, 5);
+
+    fiber_mgmt::shutdown();
+
+    return 0;
+}
+
 int main()
 {
     const auto main_fiber = ::ConvertThreadToFiber(0);
@@ -181,6 +247,12 @@ int main()
             return 6;
     }
     fiber_mgmt::shutdown();
+
+    if (test4(main_fiber))
+        return 7;
+
+    if (test5(main_fiber))
+        return 8;
 
     return 0;
 }
