@@ -18,8 +18,8 @@ namespace
 
 enum class recorder_action : uint32_t
 {
-    record = 1,
-    play = 2,
+    memory_1 = 1,
+    erase = 2,
     forward = 4,
     backward = 8,
     frame_pause = 16
@@ -74,10 +74,11 @@ recorder_action g_prev_action{};
 const std::unordered_map<int, recorder_action> g_key_map = 
 {
     { VK_SPACE, recorder_action::frame_pause },
-    { VK_HOME, recorder_action::play },
-    { VK_END, recorder_action::record },
     { VK_PRIOR, recorder_action::backward },
-    { VK_NEXT, recorder_action::forward }
+    { VK_NEXT, recorder_action::forward },
+    // TODO: support multiple recordings
+    { VK_F1, recorder_action::memory_1 },
+    { VK_SHIFT, recorder_action::erase }
 };
 
 // TODO: this function is kind of a mess, split/simplify
@@ -139,24 +140,36 @@ bool input_hook(IGame* game)
             g_prev_bitmask[i] = bitmask;
         }
 
-        if (!(g_prev_action & recorder_action::record) && !!(action & recorder_action::record))
+        if (!(g_prev_action & recorder_action::memory_1) && !!(action & recorder_action::memory_1))
         {
-            g_playing = false;
-            g_recording = !g_recording;
-            if (g_recording)
+            if (!!(action & recorder_action::erase))
             {
-                g_state_history.clear();
                 g_input_history.clear();
+                g_state_history.clear();
             }
-            g_history_idx = 0;
-            g_out_of_memory = false;
-        }
-
-        if (!(g_prev_action & recorder_action::play) && !!(action & recorder_action::play))
-        {
-            g_recording = false;
-            g_playing = !g_playing && !g_input_history.empty();
-            g_history_idx = 0;
+            else
+            {
+                if (g_recording || g_playing)
+                {
+                    g_recording = false;
+                    g_playing = false;
+                }
+                else
+                {
+                    if (g_input_history.empty())
+                    {
+                        g_playing = false;
+                        g_recording = true;
+                        g_out_of_memory = false;
+                    }
+                    else
+                    {
+                        g_recording = false;
+                        g_playing = true;
+                    }
+                    g_history_idx = 0;
+                }
+            }
         }
 
         if (!(g_prev_action & recorder_action::frame_pause) && !!(action & recorder_action::frame_pause))
@@ -166,24 +179,38 @@ bool input_hook(IGame* game)
             g_out_of_memory = false;
         }
 
-        if (g_manual_frame_advance && !!(action & recorder_action::forward))
+        if (g_manual_frame_advance)
         {
-            speed_control_enabled = true;
-            if (!(g_prev_action & recorder_action::forward) || g_speed_control_counter > 60)
-                g_speed = 1;
-            else
-                g_speed = 0;
-            ++g_speed_control_counter;
-        }
+            if (!!(action & recorder_action::forward))
+            {
+                speed_control_enabled = true;
+                if (!(g_prev_action & recorder_action::forward) || g_speed_control_counter > 60)
+                    g_speed = 1;
+                else
+                    g_speed = 0;
+                ++g_speed_control_counter;
+            }
 
-        if (g_manual_frame_advance && !!(action & recorder_action::backward))
+            if (!!(action & recorder_action::backward))
+            {
+                speed_control_enabled = true;
+                if (!(g_prev_action & recorder_action::backward) || g_speed_control_counter > 60)
+                    g_speed = -1;
+                else
+                    g_speed = 0;
+                ++g_speed_control_counter;
+            }
+        }
+        else
         {
-            speed_control_enabled = true;
-            if (!(g_prev_action & recorder_action::backward) || g_speed_control_counter > 60)
-                g_speed = -1;
+            if (!!(action & recorder_action::forward))
+            {
+                game->EnableFpsLimit(false);
+            }
             else
-                g_speed = 0;
-            ++g_speed_control_counter;
+            {
+                game->EnableFpsLimit(true);
+            }
         }
 
         g_prev_action = action;
