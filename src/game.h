@@ -63,6 +63,7 @@ struct IGame
     virtual int32_t LimitFps() const = 0;
 
     virtual size_t GetImageBase() const = 0;
+    virtual HWND GetWindowHandle() const = 0;
 
     virtual void RegisterCallback(Event event, CallbackFuncType f, CallbackPosition pos = CallbackPosition::Last) = 0;
 

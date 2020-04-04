@@ -516,6 +516,7 @@ struct gg_state
 
     struct IDirect3DDevice9;
     memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
+    memory_offset<HWND, 0x506554> hwnd;
 };
 
 void load_global_data(size_t memory_base, gg_state& state);

@@ -180,7 +180,8 @@ struct reflect<gg_state>
         &gg_state::play_sound,
         &gg_state::process_objects,
         &gg_state::process_input,
-        &gg_state::direct3d9
+        &gg_state::direct3d9,
+        &gg_state::hwnd
     );
 };
 

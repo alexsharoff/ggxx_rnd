@@ -122,6 +122,8 @@ void game_tick()
             gg_state global_data;
             load_global_data(g_image_base, global_data);
             g_global_data_orig.play_sound = global_data.play_sound;
+            g_global_data_orig.hwnd = global_data.hwnd;
+            g_global_data_orig.direct3d9 = global_data.direct3d9;
 
             global_data.get_raw_input_data.get().set(get_raw_input_data);
             global_data.limit_fps.get().set(limit_fps);
@@ -479,6 +481,11 @@ public:
     size_t GetImageBase() const final
     {
         return g_image_base;
+    }
+
+    HWND GetWindowHandle() const final
+    {
+        return g_global_data_orig.hwnd;
     }
 
     void RegisterCallback(Event event, std::function<bool(IGame*)> f, CallbackPosition pos) final
