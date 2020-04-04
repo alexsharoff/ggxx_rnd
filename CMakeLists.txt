@@ -14,11 +14,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Link static MSVCRT for all targets
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+add_compile_options($<$<NOT:$<CONFIG:Debug>>:/GL> /W4 /WX /Wv:18)
+add_link_options($<$<NOT:$<CONFIG:Debug>>:/LTCG>)
+
 add_subdirectory(ggpo)
 
 add_compile_definitions(
-    BOOST_ALL_NO_LIB
-    BOOST_ERROR_CODE_HEADER_ONLY
     NOMINMAX
     WIN32_LEAN_AND_MEAN
 )
@@ -32,11 +33,18 @@ add_library(libgg.static STATIC
 target_link_libraries(libgg.static PUBLIC dbghelp)
 
 add_library(libgg SHARED
+    src/game.cpp
+    src/game_state.cpp
+    src/ggpo.cpp
     src/libgg.cpp
-    src/network.cpp
+    src/patches.cpp
+    src/recorder.cpp
+    src/skip_intro.cpp
+    src/sound_fix.cpp
+    src/training_mode_ex.cpp
 )
 target_link_libraries(libgg GGPO libgg.static)
-#target_compile_definitions(libgg PRIVATE LIBGG_DBGPRINT)
+target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_ENABLE>)
 
 add_subdirectory(src/steam_api_nop)
 

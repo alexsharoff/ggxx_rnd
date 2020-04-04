@@ -2,6 +2,8 @@
 
 #include "mini_reflection.h"
 
+#include <Windows.h>
+
 #include <cassert>
 #include <cstring>
 #include <limits>
@@ -215,6 +217,7 @@ struct local_memory_accessor
             return;
         MEMORY_BASIC_INFORMATION info;
         auto success = ::VirtualQuery(ptr, &info, sizeof(info));
+        (void)success;
         assert(success);
         bool cleanup = false;
         if (info.Protect != PAGE_EXECUTE_READWRITE)
@@ -229,8 +232,34 @@ struct local_memory_accessor
         {
             DWORD unused;
             auto success = ::VirtualProtect(info.BaseAddress, info.RegionSize, info.Protect, &unused);
+            (void)success;
             assert(success);
         }
+    }
+
+    template<class T, size_t N>
+    static void write(const T (&value)[N], size_t addr)
+    {
+        for (size_t i = 0; i < N; ++i)
+            write(value[i], addr + sizeof(value[i]) * i);
+    }
+};
+
+struct local_memory_accessor_unprotected
+{
+    template<class T>
+    static void read(size_t addr, T& value)
+    {
+        static_assert(std::is_standard_layout_v<T>);
+        value = *reinterpret_cast<const T*>(addr);
+    }
+
+    template<class T>
+    static void write(const T& value, size_t addr)
+    {
+        const auto ptr = reinterpret_cast<T*>(addr);
+        static_assert(std::is_standard_layout_v<T>);
+        *ptr = value;
     }
 
     template<class T, size_t N>
@@ -248,7 +277,7 @@ struct dumper
     dumper(const MemoryAccessorT& accessor) : m_accessor(accessor) {}
 
     template<class T>
-    void operator()(const T& val, const self<T>&, size_t addr_o, size_t& addr_m) const
+    void operator()(const T& val, const self<T>&, size_t /* addr_o */, size_t& addr_m) const
     {
         m_accessor.write(val, addr_m);
         addr_m += sizeof(T);
@@ -258,7 +287,7 @@ struct dumper
     template<class T, size_t Offset>
     void operator()(const memory_offset<T, Offset>& o,
                     const self<memory_offset<T, Offset>>&,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t addr_o, size_t& /* addr_m */) const
     {
         size_t addr = addr_o + Offset;
         for_each_member_addr(o.get(), *this, addr);
@@ -277,7 +306,7 @@ struct dumper
     template<class T, size_t Offset>
     void operator()(const ptr_chain<T, Offset>& o,
                     const self<ptr_chain<T, Offset>>&,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t /* addr_o */, size_t& addr_m) const
     {
         if (o.ptr)
         {
@@ -289,7 +318,7 @@ struct dumper
     template<class T, size_t Offset, size_t... Args>
     void operator()(const ptr_chain<T, Offset, Args...>& o,
                     const self<ptr_chain<T, Offset, Args...>>&,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t /* addr_o */, size_t& addr_m) const
     {
         if (o.ptr)
         {
@@ -302,7 +331,7 @@ struct dumper
     }
 
     template<class T, size_t N>
-    void operator()(const T (&arr)[N], const array<T, N>&, size_t addr_o, size_t& addr_m) const
+    void operator()(const T (&arr)[N], const array<T, N>&, size_t /* addr_o */, size_t& addr_m) const
     {
         for (size_t i = 0; i < N; ++i)
         {
@@ -312,7 +341,7 @@ struct dumper
 
     template<class T, class BaseT, class MemberT>
     void operator()(const T& o, const member_descr<BaseT, MemberT>& m,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t /* addr_o */, size_t& addr_m) const
     {
         for_each_member_addr(o.*m.member, *this, addr_m);
     }
@@ -335,7 +364,7 @@ struct loader
     loader(const MemoryAccessorT& accessor) : m_accessor(accessor) {}
 
     template<class T>
-    void operator()(T& val, const self<T>&, size_t addr_o, size_t& addr_m) const
+    void operator()(T& val, const self<T>&, size_t /* addr_o */, size_t& addr_m) const
     {
         m_accessor.read(addr_m, val);
         addr_m += sizeof(T);
@@ -344,7 +373,7 @@ struct loader
     template<class T, size_t Offset>
     void operator()(memory_offset<T, Offset>& o,
                     const self<memory_offset<T, Offset>>&,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t addr_o, size_t& /* addr_m */) const
     {
         size_t addr = addr_o + Offset;
         for_each_member_addr(o.get(), *this, addr);
@@ -353,7 +382,7 @@ struct loader
     template<class T, size_t Offset>
     void operator()(ptr_chain<T, Offset>& o,
                     const self<ptr_chain<T, Offset>>&,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t /* addr_o */, size_t& addr_m) const
     {
         size_t addr_m_o = addr_m + Offset;
         T value;
@@ -391,7 +420,7 @@ struct loader
     }
 
     template<class T, size_t N>
-    void operator()(T (&arr)[N], const array<T, N>&, size_t addr_o, size_t& addr_m) const
+    void operator()(T (&arr)[N], const array<T, N>&, size_t /* addr_o */, size_t& addr_m) const
     {
         for (size_t i = 0; i < N; ++i)
         {
@@ -401,14 +430,14 @@ struct loader
 
     template<class T, class BaseT, class MemberT>
     void operator()(T& o, const member_descr<BaseT, MemberT>& m,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t /* addr_o */, size_t& addr_m) const
     {
         for_each_member_addr(o.*m.member, *this, addr_m);
     }
 
     template<class T, class BaseT, class T2, offset_t Offset>
     void operator()(T& o, const member_descr<BaseT, memory_offset<T2, Offset>>& m,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t addr_o, size_t& /* addr_m */) const
     {
         for_each_member_addr(o.*m.member, *this, addr_o);
     }
@@ -435,7 +464,7 @@ void load(const T1* from, T2& to)
 template<class T>
 void dump(const T& from, size_t to)
 {
-    static const dumper s_dumper;
+    static const dumper s_dumper{};
     for_each_member_addr(from, s_dumper, to);
 }
 
@@ -443,6 +472,19 @@ template<class T1, class T2>
 void dump(const T1& from, T2* to)
 {
     dump(from, reinterpret_cast<size_t>(to));
+}
+
+template<class T>
+void dump_unprotected(const T& from, size_t to)
+{
+    static const dumper<local_memory_accessor_unprotected> s_dumper{};
+    for_each_member_addr(from, s_dumper, to);
+}
+
+template<class T1, class T2>
+void dump_unprotected(const T1& from, T2* to)
+{
+    dump_unprotected(from, reinterpret_cast<size_t>(to));
 }
 
 }

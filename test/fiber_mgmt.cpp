@@ -62,14 +62,14 @@ int test2(LPVOID main_fiber)
     TEST_EQ(arg.counter, 3);
 
     // restore previous state
-    fiber_mgmt::dump_state(fiber, state);
+    fiber_mgmt::dump_state(state);
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
     {
         ::SwitchToFiber(fiber);
     }
-    // fiber_mgmt::free wasn't called, so DeleteFiber does nothing
+    // reference counter wasn't free'd, so DeleteFiber does nothing here
     ::DeleteFiber(fiber);
     TEST_EQ(arg.counter, 6);
 
@@ -110,7 +110,7 @@ int test3(LPVOID main_fiber, size_t n)
     // restore previous state
     for (const auto fiber : fibers)
     {
-        fiber_mgmt::dump_state(fiber, state_map[fiber]);
+        fiber_mgmt::dump_state(state_map[fiber]);
     }
     for (auto& arg : fiber_args)
         arg.done = false;
@@ -132,10 +132,10 @@ int test3(LPVOID main_fiber, size_t n)
     {
         TEST_EQ(arg.counter, 5);
     }
+    state_map.clear();
     for (const auto fiber : fibers)
     {
-        fiber_mgmt::free(fiber);
-        // fiber was free'd from fiber_mgmt, it can be destroyed now
+        // ref counter was free'd, fiber will be destroyed now
         ::DeleteFiber(fiber);
     }
 
@@ -157,7 +157,7 @@ int test4(LPVOID main_fiber)
     TEST_EQ(arg.counter, 3);
 
     // restore previous state
-    fiber_mgmt::dump_state(fiber, state);
+    fiber_mgmt::dump_state(state);
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
@@ -192,14 +192,13 @@ int test5(LPVOID main_fiber)
     TEST_EQ(arg.counter, 3);
 
     // restore previous state
-    fiber_mgmt::dump_state(fiber, state);
+    fiber_mgmt::dump_state(state);
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
     {
         ::SwitchToFiber(fiber);
     }
-    fiber_mgmt::free(fiber);
     ::DeleteFiber(fiber);
     TEST_EQ(arg.counter, 5);
 
@@ -220,7 +219,6 @@ int main()
         if (test1(main_fiber))
             return 2;
     }
-    fiber_mgmt::free_all();
     fiber_mgmt::shutdown();
 
     fiber_mgmt::init();

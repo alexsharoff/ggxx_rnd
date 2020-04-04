@@ -283,7 +283,7 @@ struct simple_printer
     }
 
     template<class T, size_t N>
-    void operator()(const volatile T (&arr)[N], const array<T, N>&, size_t, size_t, std::ostream& os) const
+    void operator()(const volatile T (&/* arr */)[N], const array<T, N>&, size_t, size_t, std::ostream& os) const
     {
         os << "volatile";
     }
@@ -312,7 +312,7 @@ struct simple_printer
 
     template<class T, class BaseT, class MemberT>
     void operator()(
-        const volatile T& o, const member_descr<BaseT, MemberT>&, size_t, size_t,
+        const volatile T& /* o */, const member_descr<BaseT, MemberT>&, size_t, size_t,
         std::ostream& os) const
     {
         os << "volatile";

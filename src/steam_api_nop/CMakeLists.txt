@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.12)
 
 project(steam_api_nop)
 
+# TODO: fix warnings and remove this
+get_directory_property(opts COMPILE_OPTIONS)
+if(opts)
+	list(REMOVE_ITEM opts /W4)
+	set_directory_properties(PROPERTIES COMPILE_OPTIONS "${opts}")
+endif()
+
 add_library(steam_api SHARED
 	SteamAPI.cpp
 	SteamFriends005.cpp

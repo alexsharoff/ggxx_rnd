@@ -2,11 +2,14 @@
 
 #include <Windows.h>
 
+#include <memory>
 #include <vector>
 
 
 namespace fiber_mgmt
 {
+
+typedef VOID (WINAPI delete_fiber_func_t)(LPVOID);
 
 struct fiber_state
 {
@@ -20,8 +23,24 @@ struct fiber_state
         size_t* esp; // D8
         uint8_t data4[0x21C]; // DC
     } data; // 2F8
-    // TODO: try to use static array here, stack size should be the same every time
+    // TODO: try to use static array here
     std::vector<size_t> stack;
+    struct refcount_
+    {
+        refcount_(LPVOID f_, delete_fiber_func_t* d_, size_t s_)
+            : fiber(f_)
+            , deleter(d_)
+            , stack_size(s_)
+        {}
+        ~refcount_()
+        {
+            deleter(fiber);
+        }
+        LPVOID fiber;
+        delete_fiber_func_t* deleter;
+        size_t stack_size;
+    };
+    std::shared_ptr<refcount_> refcount;
 };
 static_assert(sizeof(fiber_state::data_) == 0x2f8);
 
@@ -31,12 +50,8 @@ void shutdown();
 
 void load_state(LPVOID fiber, fiber_state& state);
 
-void dump_state(LPVOID fiber, const fiber_state& state);
+void dump_state(const fiber_state& state);
 
 void transfer_ownership(LPVOID fiber);
-
-void free(LPVOID fiber);
-
-void free_all();
 
 }

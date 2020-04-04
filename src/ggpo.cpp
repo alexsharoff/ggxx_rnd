@@ -1,4 +1,7 @@
-#include "network.h"
+#include "ggpo.h"
+
+#include "memory_dump.h"
+#include "util.h"
 
 #include <ggponet.h>
 
@@ -8,6 +11,8 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+
+#include <Windows.h>
 
 
 #define GGPO_CHECK(expr) \
@@ -21,85 +26,100 @@
 
 #pragma once
 
-#include <Windows.h>
 
-#ifdef LIBGG_DBGPRINT
-#define LIBGG_LOG() std::cout
-#else
+namespace ggpo
+{
+
 namespace
-{
-struct dev_null_t
-{
-    template<typename T>
-    dev_null_t& operator<<(const T&) { return *this; }
-    template<typename T, size_t N>
-    dev_null_t& operator<<(const T(&)[N]) { return *this; }
-    // for std::endl et al.
-    dev_null_t& operator<<(std::ostream&(*)(std::ostream&)) { return *this; }
-} g_dev_null;
-}
-#define LIBGG_LOG() g_dev_null
-#endif
-
-namespace network
 {
 
 GGPOSession* g_session = nullptr;
 GGPOPlayerHandle g_player_handles[2];
 bool g_call_ggpo_idle_manually = true;
-struct pair_hash
-{
-    template<class T1, class T2>
-    std::size_t operator() (const std::pair<T1, T2>& pair) const
-    {
-        return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
-    }
-};
-using sound_set_t = std::unordered_set<std::pair<const IXACT3WaveBank*, int16_t>, pair_hash>;
-std::unordered_map<size_t, sound_set_t> g_heard_sounds;
 bool g_during_match = false;
 bool g_replaying_input = false;
 bool g_is_active = false;
-size_t g_frame = 0;
+size_t g_frame_base = 0;
 bool g_waiting_for_first_match = false;
+std::unordered_map<size_t, std::shared_ptr<game_state>> g_saved_state_map;
+size_t g_vs_2p_jmp_addr = 0;
+IGame* g_game = nullptr;
 
 void activate()
 {
     g_is_active = true;
     g_waiting_for_first_match = true;
+    g_saved_state_map.clear();
+}
+
+#pragma warning(push)
+// warning: flow in or out of inline asm code suppresses global optimization
+#pragma warning(disable: 4740)
+void __declspec(naked) jmp_menu_network()
+{
+    __asm {
+        push eax
+        push ebx
+        push ecx
+        push edx
+        push esi
+        push edi
+    }
+    activate();
+    __asm {
+        pop edi
+        pop esi
+        pop edx
+        pop ecx
+        pop ebx
+        pop eax
+        jmp g_vs_2p_jmp_addr
+    }
+}
+#pragma warning(pop)
+
+using memory_dump::dump;
+using memory_dump::load;
+
+void apply_patches(size_t image_base)
+{
+    load(image_base + 0x226448 + 2 * 4, g_vs_2p_jmp_addr);
+    // Replace main menu jump table entry for NETWORK
+    void* ptr = jmp_menu_network;
+    dump(ptr, image_base + 0x226448 + 3 * 4);
 }
 
 bool begin_game(const char*)
 {
-    LIBGG_LOG() << "begin_game" << std::endl;
+    LIBGG_LOG() << std::endl;
     return true;
 }
 
 bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 {
-    LIBGG_LOG() << "save_game_state" << std::endl;
+    LIBGG_LOG() << std::endl;
 
-    auto state_ptr = new history_t{};
-    save_current_state(input_data(), *state_ptr);
-    assert(g_frame == frame);
-    std::get<3>(*state_ptr) = g_frame;
+    auto state_ptr = std::make_shared<game_state>(g_game->GetState());
+    assert(state_ptr->frame - g_frame_base == static_cast<size_t>(frame));
 
-    *buffer = (unsigned char*)state_ptr;
-    *len = sizeof(history_t);
+    *buffer = (unsigned char*)state_ptr.get();
+    *len = sizeof(game_state);
     *checksum = state_checksum(*state_ptr);
+
+    g_saved_state_map[frame] = state_ptr;
+
     return true;
 }
 
-bool load_game_state(unsigned char *buffer, int len)
+bool load_game_state(unsigned char *buffer, int /* len */)
 {
-    LIBGG_LOG() << "load_game_state" << std::endl;
-    auto state_ptr = (history_t*)(buffer);
-    revert_state(*state_ptr);
-    g_frame = std::get<3>(*state_ptr);
+    LIBGG_LOG() << std::endl;
+    auto state_ptr = (game_state*)(buffer);
+    g_game->SetState(*state_ptr);
     return true;
 }
 
-bool log_game_state(char *filename, unsigned char *buffer, int len)
+bool log_game_state(char* /* filename */, unsigned char* /* buffer */, int /* len */)
 {
     return true;
 }
@@ -109,32 +129,32 @@ void free_buffer(void *buffer)
     if (!buffer)
         return;
 
-    LIBGG_LOG() << "free_buffer" <<  std::endl;
+    LIBGG_LOG() << std::endl;
 
-    // Free'd all buffers => enable_round_end_condition(true)
-    delete buffer;
+    auto state = (game_state*)buffer;
+    g_saved_state_map.erase(state->frame);
 }
 
 bool advance_frame(int)
 {
-    LIBGG_LOG() << "advance_frame" <<  std::endl;
-    enable_drawing(false);
+    LIBGG_LOG() << std::endl;
+    g_game->EnableDrawing(false);
     g_replaying_input = true;
-    ::game_tick();
-    enable_drawing(true);
+    g_game->GameTick();
+    g_game->EnableDrawing(true);
     g_replaying_input = false;
     return true;
 }
 
 bool on_event(GGPOEvent *info)
 {
-    LIBGG_LOG() << "event: " << info->code << std::endl;
+    LIBGG_LOG() << info->code << std::endl;
     return true;
 }
 
 void on_match_start()
 {
-    LIBGG_LOG() << "on_match_start" << std::endl;
+    LIBGG_LOG() << std::endl;
 
     // ggpo_idle() must be called instead of Sleep().
     // In Steam release Sleep() is called just before IDirect3D::Present,
@@ -146,28 +166,22 @@ void on_match_start()
     // 
     // This disables limit_fps() function when it's called by the game.
     // We will call it manually after getting current input data.
-    g_enable_fps_limit = false;
+    g_game->EnableFpsLimit(false);
 
-    // Round end condition should be enabled only after we confirm
-    // last input from the remote side.
-    enable_round_end_condition(false);
-
-    enable_pause_menu(false);
+    g_game->EnablePauseMenu(false);
 
     g_during_match = true;
     g_call_ggpo_idle_manually = true;
-    g_frame = 0;
+    g_frame_base = g_game->GetState().frame;
 }
 
 void on_match_end()
 {
-    LIBGG_LOG() << "on_match_end" << std::endl;
+    LIBGG_LOG() << std::endl;
 
-    g_enable_fps_limit = true;
-    enable_round_end_condition(true);
-    enable_pause_menu(true);
+    g_game->EnableFpsLimit(true);
+    g_game->EnablePauseMenu(true);
     g_during_match = false;
-    g_heard_sounds.clear();
 }
 
 void start_session()
@@ -200,13 +214,10 @@ void start_session()
     //ggpo_set_disconnect_notify_start(g_session, 1000);
     //ggpo_set_disconnect_timeout(g_session, 10000);
 
-    // During rollback, don't play sounds that were already heard 
-    g_heard_sounds.clear();
-
     g_during_match = false;
     g_waiting_for_first_match = true;
 
-    LIBGG_LOG() << "start_session" << std::endl;
+    LIBGG_LOG() << "end" << std::endl;
 }
 
 void close_session()
@@ -217,24 +228,23 @@ void close_session()
         g_session = nullptr;
     }
 
-    LIBGG_LOG() << "close_session" << std::endl;
+    LIBGG_LOG() << "end" << std::endl;
 }
 
-namespace callbacks
-{
-
-bool raw_input_data(input_data& input)
+bool input_data_hook(IGame* game)
 {
     if (!g_session || !g_during_match)
-        return false;
+        return true;
 
-    LIBGG_LOG() << "raw_input_data" <<  std::endl;
+    auto input = game->GetInput();
+
+    LIBGG_LOG() << std::endl;
 
     if (!g_replaying_input)
     {
-        g_enable_fps_limit = true;
-        limit_fps();
-        g_enable_fps_limit = false;
+        game->EnableFpsLimit(true);
+        game->LimitFps();
+        game->EnableFpsLimit(false);
     }
 
     if (g_call_ggpo_idle_manually)
@@ -242,11 +252,17 @@ bool raw_input_data(input_data& input)
 
     g_call_ggpo_idle_manually = true;
 
-    const auto& controller_configs = get_game_config().player_controller_config;
-    input.keys[0] = remap_buttons(
+    const auto frame = g_game->GetState().frame - g_frame_base;
+    const auto found = g_saved_state_map.find(frame);
+    if (found == g_saved_state_map.end())
+    {
+        g_saved_state_map[frame] = std::make_shared<game_state>(game->GetState());
+    }
+    const auto& controller_configs = game->GetGameConfig().player_controller_config;
+    input.keys[0] = game->RemapButtons(
         input.keys[0], controller_configs[0], game_config::default_controller_config
     );
-    input.keys[1] = remap_buttons(
+    input.keys[1] = game->RemapButtons(
         input.keys[1], controller_configs[1], game_config::default_controller_config
     );
 
@@ -256,39 +272,35 @@ bool raw_input_data(input_data& input)
     input = input_data();
     GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)input.keys, 4, &disconnected));
 
-    input.keys[0] = remap_buttons(
+    input.keys[0] = game->RemapButtons(
         input.keys[0], game_config::default_controller_config, controller_configs[0]
     );
-    input.keys[1] = remap_buttons(
+    input.keys[1] = game->RemapButtons(
         input.keys[1], game_config::default_controller_config, controller_configs[1]
     );
+
+    game->SetInput(input);
 
     return true;
 }
 
-bool game_tick_begin()
-{
-    return false;
-}
-
-void game_tick_end()
+bool game_tick_end_hook(IGame* game)
 {
     if (!g_is_active)
-        return;
+        return true;
 
-    if (in_match())
+    if (game->InMatch())
     {
         g_waiting_for_first_match = false;
         if (!g_during_match)
         {
             start_session();
-            LIBGG_LOG() << "game_tick_end: on_match_start" <<  std::endl;
+            LIBGG_LOG() << "on_match_start" <<  std::endl;
             on_match_start();
         }
         else
         {
-            LIBGG_LOG() << "game_tick_end: advance_frame" <<  std::endl;
-            ++g_frame;
+            LIBGG_LOG() << "advance_frame" <<  std::endl;
             GGPO_CHECK(ggpo_advance_frame(g_session));
         }
     }
@@ -298,32 +310,35 @@ void game_tick_end()
         {
             if(g_during_match)
             {
-                LIBGG_LOG() << "game_tick_end: on_match_end" <<  std::endl;
+                LIBGG_LOG() << "on_match_end" <<  std::endl;
                 on_match_end();
                 close_session();
             }
 
             // Exited from VS 2P
-            if (!g_waiting_for_first_match && find_fiber_by_name("OPTION"))
+            if (!g_waiting_for_first_match && game->FindFiberByName("OPTION"))
             {
-                LIBGG_LOG() << "game_tick_end: close_session" <<  std::endl;
+                LIBGG_LOG() << "close_session" <<  std::endl;
                 on_match_end();
                 close_session();
                 g_is_active = false;
             }
         }
     }
+
+    return true;
 }
 
-bool sleep(uint32_t ms)
+bool sleep_hook(IGame* game)
 {
     if (!g_session || !g_during_match)
-        return false;
+        return true;
 
-    LIBGG_LOG() << "sleep" <<  std::endl;
+    LIBGG_LOG() << std::endl;
 
     assert(!g_replaying_input);
 
+    const auto ms = game->GetSleepTime();
     using std::chrono::steady_clock;
     const auto idle_begin = steady_clock::now();
     GGPO_CHECK(ggpo_idle(g_session, ms));
@@ -333,27 +348,22 @@ bool sleep(uint32_t ms)
     using std::chrono::milliseconds;
     const auto idle_ms = duration_cast<milliseconds>(idle_end - idle_begin).count();
     if (ms > idle_ms)
-        ::Sleep(ms - idle_ms);
+        ::Sleep(static_cast<DWORD>(ms - idle_ms));
 
     g_call_ggpo_idle_manually = false;
 
     return true;
 }
 
-bool play_sound(const IXACT3WaveBank* bank, int16_t sound_id)
-{
-    if (!g_session || !g_during_match)
-        return false;
-
-    LIBGG_LOG() << "play_sound" <<  std::endl;
-
-    auto [_, success] = g_heard_sounds[g_frame].insert({bank, sound_id});
-    if (success)
-        return false;
-
-    return true;
 }
 
+void Initialize(IGame* game)
+{
+    game->RegisterCallback(IGame::Event::AfterGetInput, input_data_hook);
+    game->RegisterCallback(IGame::Event::BeforeSleep, sleep_hook);
+    game->RegisterCallback(IGame::Event::AfterGameTick, game_tick_end_hook);
+    apply_patches(game->GetImageBase());
+    g_game = game;
 }
 
 }
