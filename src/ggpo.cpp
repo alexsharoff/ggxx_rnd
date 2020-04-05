@@ -44,6 +44,7 @@ bool g_waiting_for_first_match = false;
 std::unordered_map<size_t, std::shared_ptr<game_state>> g_saved_state_map;
 size_t g_vs_2p_jmp_addr = 0;
 IGame* g_game = nullptr;
+command_line g_cmd;
 
 void activate()
 {
@@ -138,10 +139,12 @@ void free_buffer(void *buffer)
 bool advance_frame(int)
 {
     LIBGG_LOG() << std::endl;
-    g_game->EnableDrawing(false);
+    if (!g_cmd.nographics)
+        g_game->EnableDrawing(false);
     g_replaying_input = true;
     g_game->GameTick();
-    g_game->EnableDrawing(true);
+    if (!g_cmd.nographics)
+        g_game->EnableDrawing(true);
     g_replaying_input = false;
     return true;
 }
@@ -356,13 +359,14 @@ bool sleep_hook(IGame* game)
 
 }
 
-void Initialize(IGame* game, const command_line&)
+void Initialize(IGame* game, const command_line& cmd)
 {
     game->RegisterCallback(IGame::Event::AfterGetInput, input_data_hook);
     game->RegisterCallback(IGame::Event::BeforeSleep, sleep_hook);
     game->RegisterCallback(IGame::Event::AfterGameTick, game_tick_end_hook);
     apply_patches(game->GetImageBase());
     g_game = game;
+    g_cmd = cmd;
 }
 
 }

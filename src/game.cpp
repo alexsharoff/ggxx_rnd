@@ -44,6 +44,8 @@ void get_raw_input_data(input_data* out)
             return;
     }
 
+    input.is_active[0] = 1;
+    input.is_active[1] = 1;
     input.keys[0] = g_input[0];
     input.keys[1] = g_input[1];
     *out = input;

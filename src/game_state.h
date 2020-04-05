@@ -86,7 +86,8 @@ struct input_data
     struct joystick
     {
         uint8_t axes[4];
-    } joysticks[4];
+    } joysticks[2];
+    uint32_t is_active[2];
     uint32_t unknown[2];
 };
 
