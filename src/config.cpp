@@ -29,7 +29,7 @@ config load_config()
     return cfg;
 }
 
-void save_config(const config& cfg)
+void save_config(const config& /* cfg */)
 {
     // TODO: implement
     //std::ofstream f("libgg.cfg", std::ios::binary);

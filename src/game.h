@@ -4,6 +4,7 @@
 #include "config.h"
 #include "game_state.h"
 
+#include <array>
 #include <functional>
 #include <memory>
 
@@ -31,10 +32,10 @@ struct IGame
     virtual void EnableFpsLimit(bool enable) = 0;
 
     virtual const game_state& GetState() const = 0;
-    virtual const input_data& GetInput() const = 0;
+    virtual const std::array<uint16_t, 2>& GetInput() const = 0;
 
     virtual void SetState(const game_state& state) = 0;
-    virtual void SetInput(const input_data& input) = 0;
+    virtual void SetInput(const std::array<uint16_t, 2>& input) = 0;
 
     virtual void DisplayPlayerStatusTicker(const char* message, uint32_t side) = 0;
     virtual void DrawRect(uint32_t color, uint32_t x1, uint32_t y1,

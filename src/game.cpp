@@ -21,7 +21,7 @@ bool g_enable_fps_limit = true;
 size_t g_image_base = 0;
 std::unordered_map<IGame::Event, std::vector<IGame::CallbackFuncType>> g_callbacks;
 game_state g_state{};
-input_data g_input{};
+std::array<uint16_t, 2> g_input{};
 std::pair<IXACT3WaveBank*, int16_t> g_sound = { nullptr, static_cast<int16_t>(0) };
 uint32_t g_sleep_time = 0;
 bool g_is_ready = false;
@@ -33,7 +33,9 @@ void get_raw_input_data(input_data* out)
 
     input_data input;
     f(&input);
-    g_input = input;
+
+    g_input[0] = input.keys[0];
+    g_input[1] = input.keys[1];
 
     for (const auto& func : g_callbacks[IGame::Event::AfterGetInput])
     {
@@ -41,7 +43,9 @@ void get_raw_input_data(input_data* out)
             return;
     }
 
-    *out = g_input;
+    input.keys[0] = g_input[0];
+    input.keys[1] = g_input[1];
+    *out = input;
 }
 
 void process_input()
@@ -146,7 +150,8 @@ void game_tick()
         }
     }
 
-    g_input = input_data();
+    g_input[0] = 0;
+    g_input[1] = 0;
 
     for (const auto& func : g_callbacks[IGame::Event::BeforeGameTick])
     {
@@ -265,7 +270,7 @@ public:
         return g_state;
     }
 
-    const input_data& GetInput() const final
+    const std::array<uint16_t, 2>& GetInput() const final
     {
         return g_input;
     }
@@ -276,7 +281,7 @@ public:
         revert_state(g_image_base, g_state);
     }
 
-    void SetInput(const input_data& input) final
+    void SetInput(const std::array<uint16_t, 2>& input) final
     {
         g_input = input;
     }

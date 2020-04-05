@@ -46,7 +46,7 @@ constexpr bool operator!(const recorder_action a)
 }
 
 std::deque<game_state> g_state_history;
-std::deque<input_data> g_input_history;
+std::deque<std::array<uint16_t, 2>> g_input_history;
 bool g_recording = false;
 bool g_playing = false;
 int8_t g_speed = 1;
@@ -57,7 +57,7 @@ uint16_t g_speed_control_counter = 0;
 struct saved_state
 {
     std::optional<game_state> state;
-    std::optional<input_data> input;
+    std::optional<std::array<uint16_t, 2>> input;
 
     void reset()
     {
@@ -74,7 +74,13 @@ command_line g_cmd;
 // TODO: this function is kind of a mess, split/simplify
 bool input_hook(IGame* game)
 {
-    if (game->InMatch() && game->InTrainingMode())
+    /*if (g_cmd.record)
+    {
+    }
+    else if (g_cmd.replay)
+    {
+    }
+    else */if (game->InMatch() && game->InTrainingMode())
     {
         auto input = game->GetInput();
 
@@ -97,33 +103,33 @@ bool input_hook(IGame* game)
         const auto& controller_configs = game->GetGameConfig().player_controller_config;
         for (size_t i = 0; i < 2; ++i)
         {
-            const uint16_t bitmask = reverse_bytes(input.keys[i]);
+            const uint16_t bitmask = reverse_bytes(input[i]);
 
             const auto& cfg = controller_configs[i];
             const uint16_t pause_bit = reverse_bytes(cfg.pause.bit);
             if (g_recording || g_playing || g_manual_frame_advance)
-                input.keys[i] = input.keys[i] & ~pause_bit;
+                input[i] = input[i] & ~pause_bit;
 
             if (g_manual_frame_advance)
             {
                 const uint16_t reset_bit = reverse_bytes(cfg.reset.bit);
-                input.keys[i] = input.keys[i] & ~reset_bit;
+                input[i] = input[i] & ~reset_bit;
 
                 if (bitmask & cfg.reset.bit)
                 {
-                    input.keys[i] = 0;
+                    input[i] = 0;
                 }
                 else
                 {
                     const uint16_t training_mode_buttons = reverse_bytes(
                         cfg.rec_player.bit | cfg.play_memory.bit | cfg.rec_enemy.bit |
                         cfg.enemy_jump.bit | cfg.enemy_walk.bit);
-                    const uint16_t proposed_keys = game->GetInput().keys[i];
+                    const uint16_t proposed_keys = game->GetInput()[i];
                     const uint16_t ignore_bits = training_mode_buttons | pause_bit | reset_bit;
                     const uint16_t prev_keys = reverse_bytes(g_prev_bitmask[i]) & ~ignore_bits;
-                    const bool is_subset = (proposed_keys & input.keys[i]) == input.keys[i];
-                    if (is_subset && (prev_keys != 0 || input.keys[i] == 0))
-                        input.keys[i] = proposed_keys;
+                    const bool is_subset = (proposed_keys & input[i]) == input[i];
+                    if (is_subset && (prev_keys != 0 || input[i] == 0))
+                        input[i] = proposed_keys;
                 }
             }
 
@@ -171,24 +177,18 @@ bool input_hook(IGame* game)
 
         if (g_manual_frame_advance)
         {
-            if (!!(action & recorder_action::forward))
+            if (!!(action & recorder_action::backward) || !!(action & recorder_action::forward))
             {
                 speed_control_enabled = true;
                 if (!(g_prev_action & recorder_action::forward) || g_speed_control_counter > 60)
                     g_speed = 1;
-                else
-                    g_speed = 0;
-                ++g_speed_control_counter;
-            }
-
-            if (!!(action & recorder_action::backward))
-            {
-                speed_control_enabled = true;
-                if (!(g_prev_action & recorder_action::backward) || g_speed_control_counter > 60)
+                else if (!(g_prev_action & recorder_action::backward) || g_speed_control_counter > 60)
                     g_speed = -1;
                 else
                     g_speed = 0;
                 ++g_speed_control_counter;
+                g_prev_bitmask[0] = 0;
+                g_prev_bitmask[1] = 0;
             }
         }
         else
@@ -248,7 +248,7 @@ bool input_hook(IGame* game)
             if (g_recording)
             {
                 const auto& input_ = game->GetInput();
-                if (g_recording && (input.keys[0] != input_.keys[0] || input.keys[1] != input_.keys[1]))
+                if (g_recording && (input[0] != input_[0] || input[1] != input_[1]))
                 {
                     // recorded input at frame g_history_idx changed
                     // reset all recorded state after g_history_idx (but not input)

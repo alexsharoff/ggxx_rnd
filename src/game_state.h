@@ -90,6 +90,8 @@ struct input_data
     uint32_t unknown[2];
 };
 
+static_assert(sizeof(input_data) == 0x1c);
+
 typedef int (fiber_func_t)();
 
 struct menu_fiber
