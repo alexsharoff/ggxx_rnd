@@ -26,7 +26,7 @@ std::unordered_map<size_t, sound_set_t> g_heard_sounds;
 
 bool play_sound_hook(IGame* game)
 {
-    const auto frame = game->GetState().frame;
+    const auto frame = game->GetState().match2.clock.get();
     const auto& sound_id = game->GetCurrentSound();
     auto [_, success] = g_heard_sounds[frame].insert(sound_id);
     if (success)

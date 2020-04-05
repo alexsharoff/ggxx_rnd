@@ -1,5 +1,7 @@
 #include "command_line.h"
 
+#include "util.h"
+
 #include <Windows.h>
 #include <shellapi.h>
 
@@ -35,12 +37,12 @@ L"Supported arguments:\n"
 "<replay file path>.ggr\n"
 "--record <path>\n"
 "--replay <path>\n"
+"--checkstate\n"
+"--nographics\n"
 ;
 
 void show_help(const wchar_t* reason = nullptr, bool is_error = false)
 {
-    UINT type = is_error ? MB_ICONWARNING : MB_ICONINFORMATION;
-    type |= MB_TASKMODAL | MB_TOPMOST;
     std::wstring message;
     if (reason)
     {
@@ -48,7 +50,7 @@ void show_help(const wchar_t* reason = nullptr, bool is_error = false)
         message += L"\n\n";
     }
     message += help_message;
-    ::MessageBoxW(NULL, message.c_str(), L"GGXXACPR", type);
+    show_message_box(message.c_str(), is_error);
 }
 
 }
@@ -90,9 +92,23 @@ command_line parse_command_line()
         found = std::find(args.begin(), args.end(), L"--replay");
         if (found != args.end() && (found + 1) != args.end())
         {
-            cmd.replay_path = *(++found);
+            cmd.replay_path = *(found + 1);
             cmd.replay = true;
             args.erase(found, found + 2);
+        }
+
+        found = std::find(args.begin(), args.end(), L"--checkstate");
+        if (found != args.end())
+        {
+            cmd.checkstate = true;
+            args.erase(found);
+        }
+
+        found = std::find(args.begin(), args.end(), L"--nographics");
+        if (found != args.end())
+        {
+            cmd.nographics = true;
+            args.erase(found);
         }
 
         if (!args.empty())

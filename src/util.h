@@ -56,3 +56,5 @@ inline uint16_t reverse_bytes(uint16_t value)
 {
     return value / 256 + (value & 0xff) * 256;
 }
+
+void show_message_box(const wchar_t* message, bool error = false);

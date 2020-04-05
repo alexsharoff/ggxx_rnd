@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <deque>
+#include <fstream>
 #include <string>
 #include <utility>
 
@@ -49,6 +50,7 @@ std::deque<game_state> g_state_history;
 std::deque<std::array<uint16_t, 2>> g_input_history;
 bool g_recording = false;
 bool g_playing = false;
+uint32_t g_checksum_end;
 int8_t g_speed = 1;
 bool g_manual_frame_advance = false;
 uint16_t g_prev_bitmask[] = {0, 0};
@@ -71,16 +73,80 @@ recorder_action g_prev_action{};
 recorder_config g_cfg;
 command_line g_cmd;
 
+static_assert(sizeof(wchar_t) == sizeof(uint16_t));
+
+template<class ContainerT>
+void read_input(const wchar_t* path, ContainerT& container)
+{
+    std::ifstream ifs(path, std::ifstream::binary);
+    if (!ifs.is_open())
+    {
+        const auto message = std::wstring(L"Cannot open file: ") + path;
+        show_message_box(message.c_str(), true);
+        std::exit(2);
+    }
+
+    size_t size = 0;
+    ifs.read(reinterpret_cast<char*>(&size), sizeof(size));
+    container.clear();
+    ifs.read(reinterpret_cast<char*>(&g_checksum_end), sizeof(g_checksum_end));
+    for (size_t i = 0; i < size; ++i)
+    {
+        std::array<uint16_t, 2> input{};
+        ifs.read(reinterpret_cast<char*>(&input[0]), 4);
+        container.push_back(input);
+    }
+}
+
+template<class ContainerT>
+void write_input(const wchar_t* path, const ContainerT& input)
+{
+    std::ofstream ofs(path, std::ofstream::trunc | std::ofstream::binary);
+    if (!ofs.is_open())
+    {
+        const auto message = std::wstring(L"Cannot open file: ") + path;
+        show_message_box(message.c_str(), true);
+        std::exit(2);
+    }
+    size_t size = input.size();
+    ofs.write(reinterpret_cast<const char*>(&size), sizeof(size));
+    ofs.write(reinterpret_cast<const char*>(&g_checksum_end), sizeof(g_checksum_end));
+    for (const auto& item : input)
+    {
+        ofs.write(reinterpret_cast<const char*>(&item), 4);
+    }
+}
+
 // TODO: this function is kind of a mess, split/simplify
 bool input_hook(IGame* game)
 {
-    /*if (g_cmd.record)
+    if (g_cmd.record)
     {
+        const auto frame = game->GetState().match2.clock.get();
+        g_checksum_end = state_checksum(game->GetState());
+        if (g_input_history.size() <= frame)
+            g_input_history.resize(frame + 1);
+        g_input_history[frame] = game->GetInput();
+        write_input(g_cmd.replay_path.c_str(), g_input_history);
     }
     else if (g_cmd.replay)
     {
+        const auto frame = game->GetState().match2.clock.get();
+        if (frame == g_input_history.size() - 1 && g_cmd.checkstate)
+        {
+            if (g_checksum_end != state_checksum(game->GetState()))
+            {
+                std::cerr << "state check failed" << std::endl;
+                std::exit(1);
+            }
+        }
+        if (frame >= g_input_history.size())
+        {
+            std::exit(0);
+        }
+        game->SetInput(g_input_history[frame]);
     }
-    else */if (game->InMatch() && game->InTrainingMode())
+    else if (game->InMatch() && game->InTrainingMode())
     {
         auto input = game->GetInput();
 
@@ -380,6 +446,9 @@ void Initialize(IGame* game, recorder_config& cfg, const command_line& cmd)
 {
     g_cfg = cfg;
     g_cmd = cmd;
+    if (g_cmd.replay)
+        read_input(g_cmd.replay_path.c_str(), g_input_history);
+
     game->RegisterCallback(IGame::Event::AfterGetInput, input_hook);
     game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
 }

@@ -10,6 +10,7 @@
 
 using memory_dump::load;
 using memory_dump::dump;
+using memory_dump::dump_unprotected;
 using memory_dump::local_memory_accessor;
 
 // hooks for game functions
@@ -139,7 +140,13 @@ void game_tick()
 
             g_is_ready = true;
 
+            g_game->AutoIncrementRng(true);
+
             save_current_state(g_image_base, g_state);
+
+            // Reset game clock to zero, we'll be using it as frame counter
+            g_state.match2.clock = 0;
+            dump_unprotected(g_state.match2.clock, g_image_base);
         }
         else
         {
@@ -161,8 +168,6 @@ void game_tick()
 
     const auto f = *g_global_data_orig.game_tick.get().get();
     f();
-
-    ++g_state.frame;
 
     for (const auto& func : g_callbacks[IGame::Event::AfterGameTick])
     {
@@ -213,7 +218,7 @@ uint32_t direction_bitmask_to_icon_id(uint32_t input)
 class Game : public IGame
 {
 public:
-    Game(size_t image_base) : m_isReady(false)
+    Game(size_t image_base, const command_line& cmd) : m_isReady(false)
     {
         g_image_base = image_base;
 
@@ -224,6 +229,11 @@ public:
         // wait until the game is loaded (ie Loading fiber has exited)
         global_data.game_tick.get().set(game_tick);
         dump_global_data(image_base, global_data);
+
+        AutoIncrementRng(false);
+
+        if (cmd.nographics)
+            EnableDrawing(false);
 
         g_game = this;
     }
@@ -263,6 +273,23 @@ public:
     void EnableFpsLimit(bool enable) final
     {
         g_enable_fps_limit = enable;
+    }
+
+    void AutoIncrementRng(bool enable) const final
+    {
+        const auto addr = (size_t)g_image_base + 0x4323C;
+        if (enable)
+        {
+            // 75 = jne
+            const uint8_t data = 0x75;
+            local_memory_accessor::write(data, addr);
+        }
+        else
+        {
+            // eb = jmp
+            const uint8_t data = 0xeb;
+            local_memory_accessor::write(data, addr);
+        }
     }
 
     const game_state& GetState() const final
@@ -505,8 +532,8 @@ private:
     bool m_isReady;
 };
 
-std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, const command_line&)
+std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, const command_line& cmd)
 {
     assert(g_image_base == 0);
-    return std::make_shared<Game>(baseAddress);
+    return std::make_shared<Game>(baseAddress, cmd);
 }

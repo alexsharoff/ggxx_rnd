@@ -30,6 +30,11 @@ struct IGame
     virtual void EnableDrawing(bool enable) = 0;
     virtual void EnablePauseMenu(bool enable) = 0;
     virtual void EnableFpsLimit(bool enable) = 0;
+    // Each frame, RNG (Mersenne Twister) index is incremented even if it was unused.
+    // Game loading time (in frames) may fluctuate, this makes replaying pre-recorded input
+    // non-deterministic.
+    // Automatic RNG index increment should be disabled during loading.
+    virtual void AutoIncrementRng(bool enable) const = 0;
 
     virtual const game_state& GetState() const = 0;
     virtual const std::array<uint16_t, 2>& GetInput() const = 0;

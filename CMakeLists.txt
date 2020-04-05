@@ -44,6 +44,7 @@ add_library(libgg SHARED
     src/training_mode_ex.cpp
     src/command_line.cpp
     src/config.cpp
+    src/util.cpp
 )
 target_link_libraries(libgg GGPO libgg.static)
 target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_ENABLE>)

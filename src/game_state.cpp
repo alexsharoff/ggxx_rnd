@@ -254,8 +254,13 @@ void save_current_state(size_t image_base, game_state& state)
 // TODO: implement proper (mini_reflection::for_each_member)
 uint32_t state_checksum(const game_state& state)
 {
-    const auto& p1 = state.match.p1_character.get().ptr.value();
-    const auto& p2 = state.match.p2_character.get().ptr.value();
+    uint32_t hash = 0x83215609; // initial hash value, prime number
+    const auto& p1 = state.match.p1_character.get().ptr;
+    if (p1.has_value())
+        hash ^= std::hash<uint16_t>{}(p1.value().health);
+    const auto& p2 = state.match.p2_character.get().ptr;
+    if (p2.has_value())
+        hash ^= std::hash<uint16_t>{}(p2.value().health);
     auto& p1_char_state = state.match.character_state.get()[0];
     auto& p2_char_state = state.match.character_state.get()[1];
     const auto& rng1 = state.match2.rng1.get();
@@ -264,15 +269,13 @@ uint32_t state_checksum(const game_state& state)
     //const auto projectile_begin = state.match.projectiles.get().ptr.value().data;
     //const auto extra_obj_begin = state.match.extra_objects.get().ptr.value().data;
     return
-        std::hash<uint32_t>{}(state.frame) ^
+        hash ^
         std::hash<uint32_t>{}(state.match2.clock.get()) ^
         std::hash<uint8_t>{}(state.match2.p1_rounds_won.get()) ^
         std::hash<uint8_t>{}(state.match2.p2_rounds_won.get()) ^
         std::hash<uint32_t>{}(state.match2.round_end_bitmask.get()) ^
         std::hash<uint16_t>{}(state.match2.match_countdown.get()) ^
         std::hash<uint8_t>{}(state.match2.round_state.get()) ^
-        std::hash<uint16_t>{}(p1.health) ^
-        std::hash<uint16_t>{}(p2.health) ^
         std::hash<uint16_t>{}(p1_char_state.stun_accumulator) ^
         std::hash<uint16_t>{}(p2_char_state.stun_accumulator) ^
         std::hash<uint64_t>{}(rng1.index) ^

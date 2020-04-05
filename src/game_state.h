@@ -413,7 +413,6 @@ struct game_state
     match_state match;
     match_state_2 match2;
     std::vector<fiber_mgmt::fiber_state> fibers;
-    size_t frame = 0;
 };
 
 typedef void (process_input_func_t)();

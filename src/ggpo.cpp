@@ -100,7 +100,7 @@ bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
     LIBGG_LOG() << std::endl;
 
     auto state_ptr = std::make_shared<game_state>(g_game->GetState());
-    assert(state_ptr->frame - g_frame_base == static_cast<size_t>(frame));
+    assert(state_ptr->match2.clock.get() - g_frame_base == static_cast<size_t>(frame));
 
     *buffer = (unsigned char*)state_ptr.get();
     *len = sizeof(game_state);
@@ -132,7 +132,7 @@ void free_buffer(void *buffer)
     LIBGG_LOG() << std::endl;
 
     auto state = (game_state*)buffer;
-    g_saved_state_map.erase(state->frame);
+    g_saved_state_map.erase(state->match2.clock.get());
 }
 
 bool advance_frame(int)
@@ -172,7 +172,7 @@ void on_match_start()
 
     g_during_match = true;
     g_call_ggpo_idle_manually = true;
-    g_frame_base = g_game->GetState().frame;
+    g_frame_base = g_game->GetState().match2.clock.get();
 }
 
 void on_match_end()
@@ -252,7 +252,7 @@ bool input_data_hook(IGame* game)
 
     g_call_ggpo_idle_manually = true;
 
-    const auto frame = g_game->GetState().frame - g_frame_base;
+    const auto frame = g_game->GetState().match2.clock.get() - g_frame_base;
     const auto found = g_saved_state_map.find(frame);
     if (found == g_saved_state_map.end())
     {
