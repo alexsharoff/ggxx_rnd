@@ -2,6 +2,8 @@
 
 #include <Windows.h>
 
+#include "command_line.h"
+#include "config.h"
 #include "game.h"
 #include "patches.h"
 #include "ggpo.h"
@@ -16,14 +18,17 @@ extern "C" __declspec(dllexport) void libgg_init()
     static std::shared_ptr<IGame> s_game;
     if (!s_game)
     {
+        const auto cmd = parse_command_line();
+        auto cfg = load_config();
+
         const auto image_base = (size_t)::GetModuleHandle(nullptr);
         apply_patches(image_base);
-        s_game = IGame::Initialize(image_base);
-        ggpo::Initialize(s_game.get());
-        recorder::Initialize(s_game.get());
-        training_mode_ex::Initialize(s_game.get());
-        skip_intro::Initialize(s_game.get());
-        sound_fix::Initialize(s_game.get());
+        s_game = IGame::Initialize(image_base, cmd);
+        ggpo::Initialize(s_game.get(), cmd);
+        recorder::Initialize(s_game.get(), cfg.recorder, cmd);
+        training_mode_ex::Initialize(s_game.get(), cmd);
+        skip_intro::Initialize(s_game.get(), cmd);
+        sound_fix::Initialize(s_game.get(), cmd);
     }
 }
 

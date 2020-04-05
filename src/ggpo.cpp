@@ -357,7 +357,7 @@ bool sleep_hook(IGame* game)
 
 }
 
-void Initialize(IGame* game)
+void Initialize(IGame* game, const command_line&)
 {
     game->RegisterCallback(IGame::Event::AfterGetInput, input_data_hook);
     game->RegisterCallback(IGame::Event::BeforeSleep, sleep_hook);

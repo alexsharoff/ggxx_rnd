@@ -500,7 +500,7 @@ private:
     bool m_isReady;
 };
 
-std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress)
+std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, const command_line&)
 {
     assert(g_image_base == 0);
     return std::make_shared<Game>(baseAddress);

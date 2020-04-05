@@ -1,8 +1,12 @@
 
 #include "recorder.h"
 
+#include "command_line.h"
+#include "config.h"
 #include "util.h"
 
+#include <algorithm>
+#include <cwctype>
 #include <deque>
 #include <string>
 #include <utility>
@@ -16,14 +20,8 @@ namespace recorder
 namespace
 {
 
-enum class recorder_action : uint32_t
-{
-    memory_1 = 1,
-    erase = 2,
-    forward = 4,
-    backward = 8,
-    frame_pause = 16
-};
+using recorder_action = recorder_config::recorder_action;
+
 constexpr recorder_action operator|(const recorder_action a, const recorder_action b)
 {
     return static_cast<recorder_action>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
@@ -70,16 +68,8 @@ struct saved_state
 saved_state g_saved_state;
 bool g_out_of_memory = false;
 recorder_action g_prev_action{};
-// TODO: put this into external config
-const std::unordered_map<int, recorder_action> g_key_map = 
-{
-    { VK_SPACE, recorder_action::frame_pause },
-    { VK_PRIOR, recorder_action::backward },
-    { VK_NEXT, recorder_action::forward },
-    // TODO: support multiple recordings
-    { VK_F1, recorder_action::memory_1 },
-    { VK_SHIFT, recorder_action::erase }
-};
+recorder_config g_cfg;
+command_line g_cmd;
 
 // TODO: this function is kind of a mess, split/simplify
 bool input_hook(IGame* game)
@@ -96,7 +86,7 @@ bool input_hook(IGame* game)
         recorder_action action{};
         if (::GetForegroundWindow() == game->GetWindowHandle())
         {
-            for (const auto& [key, action_] : g_key_map)
+            for (const auto& [key, action_] : g_cfg.key_map)
             {
                 if (::GetAsyncKeyState(key))
                     action |= action_;
@@ -386,8 +376,10 @@ bool process_objects_hook(IGame* game)
 
 }
 
-void Initialize(IGame* game)
+void Initialize(IGame* game, recorder_config& cfg, const command_line& cmd)
 {
+    g_cfg = cfg;
+    g_cmd = cmd;
     game->RegisterCallback(IGame::Event::AfterGetInput, input_hook);
     game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
 }

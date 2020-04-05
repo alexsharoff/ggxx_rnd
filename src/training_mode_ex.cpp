@@ -76,7 +76,7 @@ bool process_objects_hook(IGame* game)
 }
 
 
-void Initialize(IGame* game)
+void Initialize(IGame* game, const command_line&)
 {
     game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
 }

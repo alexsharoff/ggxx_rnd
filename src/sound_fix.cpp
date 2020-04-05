@@ -37,7 +37,7 @@ bool play_sound_hook(IGame* game)
 
 }
 
-void Initialize(IGame* game)
+void Initialize(IGame* game, const command_line&)
 {
     game->RegisterCallback(IGame::Event::BeforePlaySound, play_sound_hook);
 }

@@ -42,6 +42,8 @@ add_library(libgg SHARED
     src/skip_intro.cpp
     src/sound_fix.cpp
     src/training_mode_ex.cpp
+    src/command_line.cpp
+    src/config.cpp
 )
 target_link_libraries(libgg GGPO libgg.static)
 target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_ENABLE>)
