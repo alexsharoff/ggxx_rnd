@@ -165,7 +165,8 @@ struct reflect<match_state_2>
         &match_state_2::effect_data3,
         &match_state_2::effect_data4,
         &match_state_2::effect_data5,
-        &match_state_2::effect_data6
+        &match_state_2::effect_data6,
+        &match_state_2::effect_data7
     );
 };
 

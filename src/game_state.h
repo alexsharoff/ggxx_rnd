@@ -401,12 +401,14 @@ struct match_state_2
 
     // some of this data is required to avoid rng desync during rollback at
     // the beginning of fafnir -> tyrant rave (flashy effect uses rng)
+    // reproduction test: tyrant_rave_synctest.ggr
     memory_offset<float[4], 0x50F814> effect_data1;
     memory_offset<uint32_t, 0x50F824> effect_data2;
     memory_offset<uint32_t[3], 0x511224> effect_data3;
     memory_offset<uint32_t, 0x51B820> effect_data4;
     memory_offset<float, 0x5113B0> effect_data5;
     memory_offset<uint32_t, 0x520DCC> effect_data6;
+    memory_offset<data_size<0x48>, 0x5087A8> effect_data7;
 };
 
 struct game_state
