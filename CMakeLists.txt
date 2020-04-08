@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(libgg C CXX)
 
+# TODO: automate
+# Copy to build dir, run steamless, apply patches
 set(GGXXACPR_DIR "" CACHE PATH "")
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -61,8 +63,17 @@ target_link_libraries(test_fiber_mgmt libgg.static)
 #add_executable(test_binary_serializer test/binary_serializer.cpp)
 #add_executable(test_pretty_print test/pretty_print.cpp)
 
+add_executable(gg IMPORTED)
+set_target_properties(gg PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/gg.exe)
+
 add_test(NAME mini_reflection COMMAND test_mini_reflection)
 add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
+add_test(NAME gg_synctest_fafnir_into_tyrant_rave
+    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/synctest_fafnir_into_tyrant_rave.ggr --checkstate
+)
+set_tests_properties(gg_synctest_fafnir_into_tyrant_rave PROPERTIES
+    TIMEOUT 60
+)
 #add_test(NAME memory_dump COMMAND test_memory_dump)
 #add_test(NAME diff COMMAND test_diff)
 #add_test(NAME binary_serializer COMMAND test_binary_serializer)
