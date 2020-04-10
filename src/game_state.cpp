@@ -136,7 +136,8 @@ struct reflect<match_state>
         &match_state::unknown19,
         &match_state::unknown20,
         &match_state::unknown21,*/
-        &match_state::unknown22
+        &match_state::unknown22,
+        &match_state::unknown23
     );
 };
 

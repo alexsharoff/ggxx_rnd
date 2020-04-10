@@ -362,6 +362,13 @@ struct match_state
     memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A4> unknown20;
     memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A8> unknown21;
     memory_offset<active_object_state, 0x5163E0> unknown22;
+
+    // Used for validating throw attempt (opponent X axis position?).
+    // If it's not stored in game state, then rollback to the first frame
+    // of throws that put opponent far away (Kliff) will result in a hit
+    // instead of throw.
+    // test: synctest_1f_kliff_throw.ggr
+    memory_offset<uint32_t, 0x51B78C> unknown23;
 };
 
 static_assert(sizeof(player_controller_state) == 152);
@@ -401,7 +408,7 @@ struct match_state_2
 
     // some of this data is required to avoid rng desync during rollback at
     // the beginning of fafnir -> tyrant rave (flashy effect uses rng)
-    // reproduction test: tyrant_rave_synctest.ggr
+    // test: synctest_8f_fafnir_tyrant_rave.ggr
     memory_offset<float[4], 0x50F814> effect_data1;
     memory_offset<uint32_t, 0x50F824> effect_data2;
     memory_offset<uint32_t[3], 0x511224> effect_data3;
