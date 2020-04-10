@@ -39,6 +39,7 @@ L"Supported arguments:\n"
 "--replay <path>\n"
 "--checkstate\n"
 "--nographics\n"
+"--synctest <frame count>\n"
 ;
 
 void show_help(const wchar_t* reason = nullptr, bool is_error = false)
@@ -94,6 +95,13 @@ command_line parse_command_line()
         {
             cmd.replay_path = *(found + 1);
             cmd.replay = true;
+            args.erase(found, found + 2);
+        }
+
+        found = std::find(args.begin(), args.end(), L"--synctest");
+        if (found != args.end() && (found + 1) != args.end())
+        {
+            cmd.synctest_frames = std::stoi(*(found + 1));
             args.erase(found, found + 2);
         }
 

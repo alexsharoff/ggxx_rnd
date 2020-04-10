@@ -200,7 +200,7 @@ void start_session()
     callbacks.log_game_state = log_game_state;
     callbacks.on_event = on_event;
     callbacks.save_game_state = save_game_state;
-    GGPO_CHECK(ggpo_start_synctest(&g_session, &callbacks, "GGXX", 2, 2, 8));
+    GGPO_CHECK(ggpo_start_synctest(&g_session, &callbacks, "GGXX", 2, 2, g_cmd.synctest_frames));
 
     GGPOPlayer player;
     player.player_num = 1;

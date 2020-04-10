@@ -10,6 +10,7 @@ struct command_line
     bool record = false;
     bool checkstate = false;
     bool nographics = false;
+    int synctest_frames = 8;
 };
 
 command_line parse_command_line();
