@@ -1,16 +1,34 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+#include <vector>
+
+
+
 
 
 struct command_line
 {
     std::wstring replay_path;
-    bool replay = false;
-    bool record = false;
-    bool checkstate = false;
+    bool replay_record = false;
+    bool replay_check = false;
+    bool replay_update = false;
+    // when frame <key> ends, take next frame from <value> and restore its state
+    std::unordered_map<uint32_t, std::vector<uint32_t>> rollback_map;
     bool nographics = false;
     int synctest_frames = 8;
+    std::wstring displaycfg;
+    std::wstring savedata;
+    std::wstring libggcfg;
+    bool usedefaults;
+    enum class game_mode_t : uint8_t
+    {
+        default = 0,
+        vs2p = 1,
+        training = 2,
+        network = 3
+    } game_mode;
 };
 
 command_line parse_command_line();

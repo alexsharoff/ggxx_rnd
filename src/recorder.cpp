@@ -120,31 +120,34 @@ void write_input(const wchar_t* path, const ContainerT& input)
 // TODO: this function is kind of a mess, split/simplify
 bool input_hook(IGame* game)
 {
-    if (g_cmd.record)
+    if (!g_cmd.replay_path.empty())
     {
-        const auto frame = game->GetState().match2.clock.get();
-        g_checksum_end = state_checksum(game->GetState());
-        if (g_input_history.size() <= frame)
-            g_input_history.resize(frame + 1);
-        g_input_history[frame] = game->GetInput();
-        write_input(g_cmd.replay_path.c_str(), g_input_history);
-    }
-    else if (g_cmd.replay)
-    {
-        const auto frame = game->GetState().match2.clock.get();
-        if (frame == g_input_history.size() - 1 && g_cmd.checkstate)
+        if (g_cmd.replay_record)
         {
-            if (g_checksum_end != state_checksum(game->GetState()))
+            const auto frame = game->GetState().match2.clock.get();
+            g_checksum_end = state_checksum(game->GetState());
+            if (g_input_history.size() <= frame)
+                g_input_history.resize(frame + 1);
+            g_input_history[frame] = game->GetInput();
+            write_input(g_cmd.replay_path.c_str(), g_input_history);
+        }
+        else
+        {
+            const auto frame = game->GetState().match2.clock.get();
+            if (frame == g_input_history.size() - 1 && g_cmd.replay_check)
             {
-                std::cerr << "state check failed" << std::endl;
-                std::exit(1);
+                if (g_checksum_end != state_checksum(game->GetState()))
+                {
+                    std::cerr << "state check failed" << std::endl;
+                    std::exit(1);
+                }
             }
+            if (frame >= g_input_history.size())
+            {
+                std::exit(0);
+            }
+            game->SetInput(g_input_history[frame]);
         }
-        if (frame >= g_input_history.size())
-        {
-            std::exit(0);
-        }
-        game->SetInput(g_input_history[frame]);
     }
     else if (game->InMatch() && game->InTrainingMode())
     {
@@ -447,7 +450,7 @@ void Initialize(IGame* game, recorder_config& cfg, const command_line& cmd)
 {
     g_cfg = cfg;
     g_cmd = cmd;
-    if (g_cmd.replay)
+    if (!g_cmd.replay_path.empty() && !g_cmd.replay_record)
         read_input(g_cmd.replay_path.c_str(), g_input_history);
 
     game->RegisterCallback(IGame::Event::AfterGetInput, input_hook);
