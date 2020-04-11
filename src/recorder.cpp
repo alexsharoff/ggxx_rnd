@@ -165,7 +165,6 @@ bool input_hook(IGame* game)
             }
         }
 
-        bool speed_control_enabled = false;
         const auto& controller_configs = game->GetGameConfig().player_controller_config;
         for (size_t i = 0; i < 2; ++i)
         {
@@ -241,14 +240,17 @@ bool input_hook(IGame* game)
             g_out_of_memory = false;
         }
 
+        bool speed_control_enabled = false;
         if (g_manual_frame_advance)
         {
-            if (!!(action & recorder_action::backward) || !!(action & recorder_action::forward))
+            const bool backward = !!(action & recorder_action::backward);
+            const bool forward = !!(action & recorder_action::forward);
+            if (backward || forward)
             {
                 speed_control_enabled = true;
-                if (!(g_prev_action & recorder_action::forward) || g_speed_control_counter > 60)
+                if (forward && (!(g_prev_action & recorder_action::forward) || g_speed_control_counter > 60))
                     g_speed = 1;
-                else if (!(g_prev_action & recorder_action::backward) || g_speed_control_counter > 60)
+                else if (backward && (!(g_prev_action & recorder_action::backward) || g_speed_control_counter > 60))
                     g_speed = -1;
                 else
                     g_speed = 0;
@@ -273,8 +275,7 @@ bool input_hook(IGame* game)
 
         if (!speed_control_enabled)
         {
-            if (g_manual_frame_advance)
-                g_speed = 0;
+            g_speed = 0;
             g_speed_control_counter = 0;
         }
 
