@@ -107,17 +107,20 @@ struct menu_fiber
 static_assert(sizeof(menu_fiber) == 0x38);
 
 #pragma pack(push, 1)
+// common state + char-specific stuff (via union)
 struct gg_char_state
 {
-    // common state + char-specific stuff (via union)
-    // Doesn't contain any pointers
-    // TODO: elaborate later
-    char data1[0x7c];
+    uint16_t tension; // 0
+    char data1[0x18]; // 2
+    int16_t guard; // 1a
+    char data2[0x60]; // 1c
     uint16_t stun_accumulator; // 7c
     uint16_t faint_countdown; // 7e
-    char data2[7]; // 80
+    char data3[7]; // 80
     uint8_t stun_resistance; // 87
-    char data3[0xc0]; // 88
+    char data4[0x70]; // 88
+    uint16_t burst; // f8
+    char data5[0x4e]; // fa
 };
 #pragma pack(pop)
 
