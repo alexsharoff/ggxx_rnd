@@ -59,6 +59,7 @@ struct IGame
     virtual const game_config& GetGameConfig() const = 0;
     virtual bool InMatch() const = 0;
     virtual bool InTrainingMode() const = 0;
+    virtual bool InVs2p() const = 0;
     virtual uint32_t GetActivePlayers() const = 0;
     virtual bool FindFiberByName(const std::string& name) const = 0;
     virtual const std::pair<IXACT3WaveBank*, int16_t>& GetCurrentSound() const = 0;

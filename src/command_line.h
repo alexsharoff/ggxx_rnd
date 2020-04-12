@@ -17,7 +17,9 @@ struct command_line
     // when frame <key> ends, take next frame from <value> and restore its state
     std::unordered_map<uint32_t, std::vector<uint32_t>> rollback_map;
     bool nographics = false;
-    int synctest_frames = 8;
+    // TODO: GGPO bug: GGPO crashes if frames == 0 in ggpo_start_synctest
+    // Assertion failed at ggpo/lib/ggpo/ring_buffer.h:39
+    int synctest_frames = 0;
     std::wstring displaycfg;
     std::wstring savedata;
     std::wstring libggcfg;

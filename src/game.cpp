@@ -483,7 +483,13 @@ public:
     bool InTrainingMode() const final
     {
         const auto game_mode = g_state.match2.game_mode.get();
-        return game_mode == 0x101 || game_mode == 0x102;
+        return game_mode & 0x100;
+    }
+
+    bool InVs2p() const final
+    {
+        const auto game_mode = g_state.match2.game_mode.get();
+        return game_mode & 0x800;
     }
 
     uint32_t GetActivePlayers() const final

@@ -7,11 +7,11 @@
 
 #include <algorithm>
 #include <cwctype>
-#include <deque>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 
 // TODO: record anywhere not just during training, but in menus etc
@@ -46,29 +46,38 @@ constexpr bool operator!(const recorder_action a)
     return static_cast<uint32_t>(a) == 0;
 }
 
-std::deque<game_state> g_state_history;
-std::deque<std::array<uint16_t, 2>> g_input_history;
-std::deque<uint32_t> g_checksum_history;
-bool g_recording = false;
-bool g_playing = false;
-int8_t g_speed = 1;
-bool g_manual_frame_advance = false;
-uint16_t g_prev_bitmask[] = {0, 0};
-size_t g_history_idx = 0;
-uint16_t g_speed_control_counter = 0;
-struct saved_state
+struct replay_frame
 {
-    std::optional<game_state> state;
-    std::optional<std::array<uint16_t, 2>> input;
-
-    void reset()
-    {
-        state.reset();
-        input.reset();
-    }
+    std::array<uint16_t, 2> input;
+    uint32_t state_checksum;
 };
-saved_state g_saved_state;
-bool g_out_of_memory = false;
+static_assert(sizeof(replay_frame) == 8);
+
+struct frame_stop_data
+{
+    struct saved_state
+    {
+        std::optional<game_state> state;
+        std::array<uint16_t, 2> input;
+    };
+    int8_t speed = 1;
+    std::vector<saved_state> state_history;
+    size_t history_idx = 0;
+    bool enabled = false;
+    uint16_t speed_control_counter = 0;
+    bool out_of_memory = false;
+    std::array<uint16_t, 2> prev_input;
+} g_frame_stop;
+
+struct recorder_data
+{
+    std::vector<replay_frame> history;
+    bool recording = false;
+    bool playing = false;
+    std::optional<game_state> initial_state;
+    size_t initial_frame = 0;
+} g_recorder;
+
 recorder_action g_prev_action{};
 recorder_config g_cfg;
 command_line g_cmd;
@@ -87,13 +96,7 @@ static_assert(sizeof(replay_header) == 64);
 
 struct replay_body_ver_01
 {
-    struct frame
-    {
-        uint16_t input[2];
-        uint32_t state_checksum;
-    };
-    static_assert(sizeof(frame) == 8);
-    std::vector<frame> frames;
+    std::vector<replay_frame> frames;
 };
 
 bool read_replay_body_ver_01(
@@ -101,10 +104,10 @@ bool read_replay_body_ver_01(
 )
 {
     body.frames.clear();
-    constexpr auto frame_size = sizeof(replay_body_ver_01::frame);
+    constexpr auto frame_size = sizeof(replay_frame);
     for (size_t i = 0; i < header.body_size / frame_size; ++i)
     {
-        replay_body_ver_01::frame frame{};
+        replay_frame frame{};
         if (!ifs.read(reinterpret_cast<char*>(&frame), frame_size))
             return false;
         body.frames.push_back(frame);
@@ -112,7 +115,7 @@ bool read_replay_body_ver_01(
     return true;
 }
 
-bool read_input(const wchar_t* path, std::wstring& error)
+bool read_replay_file(const wchar_t* path, std::wstring& error)
 {
     std::ifstream ifs(path, std::ifstream::binary);
     if (!ifs.is_open())
@@ -144,13 +147,9 @@ bool read_input(const wchar_t* path, std::wstring& error)
             error = generic_error;
             return false;
         }
-        g_input_history.clear();
-        g_checksum_history.clear();
+        g_recorder.history.clear();
         for (const auto& f : body.frames)
-        {
-            g_checksum_history.push_back(f.state_checksum);
-            g_input_history.push_back({f.input[0], f.input[1]});
-        }
+            g_recorder.history.emplace_back(f);
     }
     else
     {
@@ -165,36 +164,8 @@ bool read_input(const wchar_t* path, std::wstring& error)
 }
 
 std::ofstream g_output_file;
-bool write_input(std::wstring& error)
-{
-    g_output_file.seekp(0);
-    replay_header header{};
-    constexpr auto frame_size = sizeof(replay_body_ver_01::frame);
-    header.body_size = g_input_history.size() * frame_size;
-    constexpr wchar_t generic_error[] = L"Write operation failed, replay may become corrupted.";
-    if (!g_output_file.write(reinterpret_cast<const char*>(&header), sizeof(header)))
-    {
-        error = generic_error;
-        return false;
-    }
-
-    for (size_t i = 0; i < g_input_history.size(); ++i)
-    {
-        const auto& input = g_input_history[i];
-        replay_body_ver_01::frame frame{};
-        frame.input[0] = input[0];
-        frame.input[1] = input[1];
-        frame.state_checksum = g_checksum_history[i];
-        if (!g_output_file.write(reinterpret_cast<const char*>(&frame), frame_size))
-        {
-            error = generic_error;
-            return false;
-        }
-    }
-    return true;
-}
-
-bool open_output_file(const wchar_t* path, std::wstring& error)
+// call before update_replay_file
+bool open_replay_file(const wchar_t* path, std::wstring& error)
 {
     g_output_file.open(path, std::ofstream::trunc | std::ofstream::binary);
     if (!g_output_file.is_open())
@@ -205,156 +176,74 @@ bool open_output_file(const wchar_t* path, std::wstring& error)
     return true;
 }
 
+bool update_replay_file(std::wstring& error)
+{
+    g_output_file.seekp(0);
+    replay_header header{};
+    constexpr auto frame_size = sizeof(replay_frame);
+    header.body_size = g_recorder.history.size() * frame_size;
+    constexpr wchar_t generic_error[] = L"Write operation failed, replay may become corrupted.";
+    if (!g_output_file.write(reinterpret_cast<const char*>(&header), sizeof(header)))
+    {
+        error = generic_error;
+        return false;
+    }
+
+    for (size_t i = 0; i < g_recorder.history.size(); ++i)
+    {
+        if (!g_output_file.write(reinterpret_cast<const char*>(&g_recorder.history[i]), frame_size))
+        {
+            error = generic_error;
+            return false;
+        }
+    }
+    return true;
+}
+
 // TODO: this function is kind of a mess, split/simplify
 bool input_hook(IGame* game)
 {
-    if (!g_cmd.replay_path.empty())
+    recorder_action action{};
+    if (::GetForegroundWindow() == game->GetWindowHandle())
     {
-        if (g_cmd.replay_record)
+        for (const auto& [key, action_] : g_cfg.key_map)
         {
-            const auto frame = game->GetState().match2.clock.get();
-            if (g_input_history.size() <= frame)
-            {
-                g_input_history.resize(frame + 1);
-                g_checksum_history.resize(frame + 1);
-            }
-            g_checksum_history[frame] = state_checksum(game->GetState());
-            g_input_history[frame] = game->GetInput();
-            std::wstring error;
-            if (!write_input(error))
-            {
-                std::wcerr << error.c_str() << std::endl;
-            }
-        }
-        else
-        {
-            const auto frame = game->GetState().match2.clock.get();
-            if (frame >= g_input_history.size())
-            {
-                std::exit(0);
-            }
-            if (g_cmd.replay_check)
-            {
-                if (g_checksum_history[frame] != state_checksum(game->GetState()))
-                {
-                    std::cerr << "State checksum mismatch at frame " << frame << std::endl;
-                    std::exit(1);
-                }
-            }
-            game->SetInput(g_input_history[frame]);
+            if (::GetAsyncKeyState(key))
+                action |= action_;
         }
     }
-    else if (game->InMatch() && game->InTrainingMode())
+
+    auto input = game->GetInput();
+
+    // Frame stop logic:
     {
-        auto input = game->GetInput();
-
-        if (g_saved_state.state.has_value())
-            game->SetState(*g_saved_state.state);
-        if (g_saved_state.input.has_value())
-            game->SetInput(*g_saved_state.input);
-
-        recorder_action action{};
-        if (::GetForegroundWindow() == game->GetWindowHandle())
-        {
-            for (const auto& [key, action_] : g_cfg.key_map)
-            {
-                if (::GetAsyncKeyState(key))
-                    action |= action_;
-            }
-        }
-
-        const auto& controller_configs = game->GetGameConfig().player_controller_config;
-        for (size_t i = 0; i < 2; ++i)
-        {
-            const uint16_t bitmask = reverse_bytes(input[i]);
-
-            const auto& cfg = controller_configs[i];
-            const uint16_t pause_bit = reverse_bytes(cfg.pause.bit);
-            if (g_recording || g_playing || g_manual_frame_advance)
-                input[i] = input[i] & ~pause_bit;
-
-            if (g_manual_frame_advance)
-            {
-                const uint16_t reset_bit = reverse_bytes(cfg.reset.bit);
-                input[i] = input[i] & ~reset_bit;
-
-                if (bitmask & cfg.reset.bit)
-                {
-                    input[i] = 0;
-                }
-                else
-                {
-                    const uint16_t training_mode_buttons = reverse_bytes(
-                        cfg.rec_player.bit | cfg.play_memory.bit | cfg.rec_enemy.bit |
-                        cfg.enemy_jump.bit | cfg.enemy_walk.bit);
-                    const uint16_t proposed_keys = game->GetInput()[i];
-                    const uint16_t ignore_bits = training_mode_buttons | pause_bit | reset_bit;
-                    const uint16_t prev_keys = reverse_bytes(g_prev_bitmask[i]) & ~ignore_bits;
-                    const bool is_subset = (proposed_keys & input[i]) == input[i];
-                    if (is_subset && (prev_keys != 0 || input[i] == 0))
-                        input[i] = proposed_keys;
-                }
-            }
-
-            g_prev_bitmask[i] = bitmask;
-        }
-
-        if (!(g_prev_action & recorder_action::memory_1) && !!(action & recorder_action::memory_1))
-        {
-            if (!!(action & recorder_action::erase))
-            {
-                g_input_history.clear();
-                g_state_history.clear();
-            }
-            else
-            {
-                if (g_recording || g_playing)
-                {
-                    g_recording = false;
-                    g_playing = false;
-                }
-                else
-                {
-                    if (g_input_history.empty())
-                    {
-                        g_playing = false;
-                        g_recording = true;
-                        g_out_of_memory = false;
-                    }
-                    else
-                    {
-                        g_recording = false;
-                        g_playing = true;
-                    }
-                    g_history_idx = 0;
-                }
-            }
-        }
-
         if (!(g_prev_action & recorder_action::frame_pause) && !!(action & recorder_action::frame_pause))
         {
-            g_manual_frame_advance = !g_manual_frame_advance;
-            g_speed = g_manual_frame_advance ? 0 : 1;
-            g_out_of_memory = false;
+            g_frame_stop.enabled = !g_frame_stop.enabled;
+            g_frame_stop.speed = g_frame_stop.enabled ? 0 : 1;
+            g_frame_stop.out_of_memory = false;
+            if (g_frame_stop.enabled)
+            {
+                g_frame_stop.history_idx = 0;
+                g_frame_stop.state_history.clear();
+            }
         }
 
         bool speed_control_enabled = false;
-        if (g_manual_frame_advance)
+        if (g_frame_stop.enabled)
         {
             const bool backward = !!(action & recorder_action::backward);
             const bool forward = !!(action & recorder_action::forward);
             if (backward || forward)
             {
                 speed_control_enabled = true;
-                if (forward && (!(g_prev_action & recorder_action::forward) || g_speed_control_counter > 60))
-                    g_speed = 1;
-                else if (backward && (!(g_prev_action & recorder_action::backward) || g_speed_control_counter > 60))
-                    g_speed = -1;
+                if (forward && (!(g_prev_action & recorder_action::forward) || g_frame_stop.speed_control_counter > 60))
+                    g_frame_stop.speed = 1;
+                else if (backward && (!(g_prev_action & recorder_action::backward) || g_frame_stop.speed_control_counter > 60))
+                    g_frame_stop.speed = -1;
                 else
-                    g_speed = 0;
-                ++g_speed_control_counter;
-                g_prev_bitmask[0] = 0;
-                g_prev_bitmask[1] = 0;
+                    g_frame_stop.speed = 0;
+                ++g_frame_stop.speed_control_counter;
             }
         }
         else
@@ -369,128 +258,167 @@ bool input_hook(IGame* game)
             }
         }
 
-        g_prev_action = action;
-
         if (!speed_control_enabled)
         {
-            g_speed = 0;
-            g_speed_control_counter = 0;
+            g_frame_stop.speed = g_frame_stop.enabled ? 0 : 1;
+            g_frame_stop.speed_control_counter = 0;
         }
 
-        if (g_playing)
+        std::optional<decltype(input)> saved_input;
+
+        if (g_frame_stop.enabled)
         {
-            if (g_history_idx < g_input_history.size())
+            if (g_frame_stop.history_idx < g_frame_stop.state_history.size())
             {
-                if (g_history_idx == 0 && !g_state_history.empty())
-                    game->SetState(g_state_history[g_history_idx]);
-
-                game->SetInput(g_input_history[g_history_idx]);
-
-                if (g_speed < 0)
-                {
-                    if (g_history_idx > 0)
-                        --g_history_idx;
-                }
-                else if (g_speed > 0)
-                {
-                    ++g_history_idx;
-                }
+                auto& state_optional = g_frame_stop.state_history[g_frame_stop.history_idx].state;
+                if (state_optional.has_value())
+                    game->SetState(*state_optional);
+                else
+                    state_optional = game->GetState();
+                saved_input = g_frame_stop.state_history[g_frame_stop.history_idx].input;
             }
             else
             {
-                if (!g_manual_frame_advance)
-                    g_playing = false;
-            }
-
-            if (g_history_idx >= g_state_history.size() && g_manual_frame_advance)
-            {
-                g_history_idx = g_state_history.size() - 1;
-                g_speed = 0;
-            }
-        }
-        else
-        {
-            if (g_recording)
-            {
-                const auto& input_ = game->GetInput();
-                if (g_recording && (input[0] != input_[0] || input[1] != input_[1]))
+                try
                 {
-                    // recorded input at frame g_history_idx changed
-                    // reset all recorded state after g_history_idx (but not input)
-                    g_state_history.resize(g_history_idx);
+                    g_frame_stop.state_history.push_back({
+                        game->GetState(),
+                        input
+                    });
+                }
+                catch(const std::bad_alloc&)
+                {
+                    g_frame_stop.out_of_memory = true;
+                    g_frame_stop.enabled = false;
                 }
             }
-            game->SetInput(input);
         }
 
-        if (g_recording && g_history_idx < 5940)
         {
-            try
+            const auto input_backup = input;
+            for (size_t i = 0; i < 2; ++i)
             {
-                if (g_history_idx >= g_state_history.size())
-                    g_state_history.resize(g_history_idx + 1);
-                if (g_history_idx >= g_input_history.size())
-                    g_input_history.resize(g_history_idx + 1);
-                g_state_history[g_history_idx] = game->GetState();
-                g_input_history[g_history_idx] = game->GetInput();
-
-                if (g_speed < 0)
+                const uint16_t bitmask = reverse_bytes(input[i]);
+                if (g_frame_stop.enabled)
                 {
-                    if (g_history_idx > 0)
-                        --g_history_idx;
-                }
-                else if (g_speed > 0)
-                {
-                    ++g_history_idx;
+                    if (!!(action & recorder_action::erase))
+                    {
+                        input[i] = 0;
+                    }
+                    else if (saved_input.has_value())
+                    {
+                        const auto saved_input_ = (*saved_input)[i];
+                        const bool is_subset = (input[i] & saved_input_) == input[i];
+                        if (input[i] == 0 || g_frame_stop.prev_input[i] != 0 && is_subset)
+                        {
+                            input[i] = saved_input_;
+                        }
+                    }
                 }
             }
-            catch(const std::bad_alloc&)
-            {
-                g_out_of_memory = true;
-                g_recording = false;
-                g_history_idx = 0;
-            }
-        }
-        else
-        {
-            g_recording = false;
+            g_frame_stop.prev_input = input_backup;
         }
 
-        g_saved_state.reset();
-        if (g_manual_frame_advance)
+        if (g_frame_stop.enabled)
         {
-            if (g_recording || g_playing)
+            if (g_frame_stop.state_history[g_frame_stop.history_idx].input != input)
             {
-                if (g_history_idx < g_state_history.size())
-                    g_saved_state.state = g_state_history[g_history_idx];
-                if (g_history_idx < g_input_history.size())
-                    g_saved_state.input = g_input_history[g_history_idx];
+                g_frame_stop.state_history[g_frame_stop.history_idx].input = input;
+                // Input for current frame has changed. Invalidate saved state for next frames
+                for (size_t i = g_frame_stop.history_idx + 1; i < g_frame_stop.state_history.size(); ++i)
+                    g_frame_stop.state_history[i].state = std::nullopt;
             }
-            else
-            {
-                if (g_speed <= 0)
-                {
-                    g_saved_state.state = game->GetState();
-                    g_saved_state.input = game->GetInput();
-                }
-            }
+            if (g_frame_stop.speed > 0)
+                ++g_frame_stop.history_idx;
+            else if (g_frame_stop.speed < 0 && g_frame_stop.history_idx > 0)
+                --g_frame_stop.history_idx;
         }
     }
-    else
+
+    // Replay logic:
     {
-        if (!game->GetState().match.pause_state.get())
+        // Disable manual replay control if replay was provided via command line
+        if (g_cmd.replay_path.empty())
         {
-            g_state_history.clear();
-            g_input_history.clear();
-            g_recording = false;
-            g_playing = false;
-            g_speed = 1;
-            g_manual_frame_advance = false;
-            g_speed_control_counter = 0;
-            g_out_of_memory = false;
-            g_saved_state.reset();
+            if (!(g_prev_action & recorder_action::memory_1) && !!(action & recorder_action::memory_1))
+            {
+                if (!!(action & recorder_action::erase))
+                {
+                    g_recorder.history.clear();
+                }
+                else
+                {
+                    if (g_recorder.recording || g_recorder.playing)
+                    {
+                        g_recorder.recording = false;
+                        g_recorder.playing = false;
+                    }
+                    else
+                    {
+                        if (g_recorder.history.empty())
+                        {
+                            g_recorder.playing = false;
+                            g_recorder.recording = true;
+                            const auto& state = game->GetState();
+                            g_recorder.initial_frame = state.match2.clock.get();
+                            g_recorder.initial_state = state;
+                        }
+                        else
+                        {
+                            g_recorder.playing = true;
+                            g_recorder.recording = false;
+                            game->SetState(*g_recorder.initial_state);
+                            g_frame_stop.state_history.clear();
+                            g_frame_stop.history_idx = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (g_recorder.playing)
+        {
+            const auto frame = game->GetState().match2.clock.get() - g_recorder.initial_frame;
+            if (frame >= g_recorder.history.size())
+            {
+                if (!g_cmd.replay_path.empty())
+                    std::exit(0);
+                else
+                    g_recorder.playing = false;
+            }
+            else
+            {
+                if (g_cmd.replay_check)
+                {
+                    if (g_recorder.history[frame].state_checksum != state_checksum(game->GetState()))
+                    {
+                        std::cerr << "State checksum mismatch at frame " << frame << std::endl;
+                        std::exit(1);
+                    }
+                }
+                input = g_recorder.history[frame].input;
+            }
+        }
+        else if (g_recorder.recording)
+        {
+            const auto frame = game->GetState().match2.clock.get() - g_recorder.initial_frame;
+            if (g_recorder.history.size() <= frame)
+                g_recorder.history.resize(frame + 1);
+            g_recorder.history[frame].state_checksum = state_checksum(game->GetState());
+            g_recorder.history[frame].input = input;
+            if (!g_cmd.replay_path.empty())
+            {
+                std::wstring error;
+                if (!update_replay_file(error))
+                {
+                    std::wcerr << error.c_str() << std::endl;
+                }
+            }
         }
     }
+
+    g_prev_action = action;
+    game->SetInput(input);
 
     return true;
 }
@@ -498,7 +426,7 @@ bool input_hook(IGame* game)
 bool process_objects_hook(IGame* game)
 {
     match_state ms;
-    if (g_manual_frame_advance)
+    if (g_frame_stop.enabled)
     {
         const auto& controller_state = game->GetState().match.controller_state.get();
         if (controller_state[0].bitmask_cur)
@@ -515,25 +443,22 @@ bool process_objects_hook(IGame* game)
             game->DrawPressedDirection(input, 460, 300);
             game->DrawPressedButtons(input, *obj, 490, 300);
         }
+
+        const auto frame = game->GetState().match2.clock.get();
+        auto str = "FRAME " + std::to_string(frame);
+        game->WriteCockpitFont(str.c_str(), 275, 440, 1, 0xFF, 1);
     }
-    game->WriteCockpitFont("DEV BUILD", 50, 100, 1, 0x50, 1);
-    if (g_recording)
+    if (g_recorder.recording)
     {
-        auto str = "REC " + std::to_string(g_history_idx);
-        game->WriteCockpitFont(str.c_str(), 285, 100, 1, 0xFF, 1);
+        game->WriteCockpitFont("REPLAY REC", 270, 100, 1, 0xFF, 1);
     }
-    if (g_playing)
+    if (g_recorder.playing)
     {
-        auto str = "PLAY " + std::to_string(g_history_idx);
-        game->WriteCockpitFont(str.c_str(), 285, 100, 1, 0xFF, 1);
+        game->WriteCockpitFont("REPLAY", 285, 100, 1, 0xFF, 1);
     }
-    if (g_manual_frame_advance)
+    if (g_frame_stop.out_of_memory)
     {
-        game->WriteCockpitFont("FRAME STOP", 260, 150, 1, 0xFF, 1);
-    }
-    if (g_out_of_memory)
-    {
-        game->WriteCockpitFont("OUT OF MEMORY!", 50, 150, 1, 0xff, 1);
+        game->WriteCockpitFont("OUT OF MEMORY!", 230, 440, 1, 0xff, 1);
     }
 
     return true;
@@ -549,9 +474,15 @@ void Initialize(IGame* game, recorder_config& cfg, const command_line& cmd)
     {
         std::wstring error;
         if (g_cmd.replay_record)
-            open_output_file(g_cmd.replay_path.c_str(), error);
+        {
+            open_replay_file(g_cmd.replay_path.c_str(), error);
+            g_recorder.recording = true;
+        }
         else
-            read_input(g_cmd.replay_path.c_str(), error);
+        {
+            read_replay_file(g_cmd.replay_path.c_str(), error);
+            g_recorder.playing = true;
+        }
 
         if (!error.empty())
         {
