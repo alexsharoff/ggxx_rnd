@@ -1,8 +1,8 @@
 #pragma once
 
+#include <deque>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 
 
@@ -15,7 +15,7 @@ struct command_line
     bool replay_check = false;
     bool replay_update = false;
     // when frame <key> ends, take next frame from <value> and restore its state
-    std::unordered_map<uint32_t, std::vector<uint32_t>> rollback_map;
+    std::unordered_map<uint32_t, std::deque<uint32_t>> rollback_map;
     bool nographics = false;
     // TODO: GGPO bug: GGPO crashes if frames == 0 in ggpo_start_synctest
     // Assertion failed at ggpo/lib/ggpo/ring_buffer.h:39

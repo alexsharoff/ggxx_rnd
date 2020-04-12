@@ -47,6 +47,7 @@ add_library(libgg SHARED
     src/command_line.cpp
     src/config.cpp
     src/util.cpp
+    src/rollback_test.cpp
 )
 target_link_libraries(libgg GGPO libgg.static Shlwapi)
 target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_ENABLE>)
@@ -69,13 +70,19 @@ set_target_properties(gg PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR
 add_test(NAME mini_reflection COMMAND test_mini_reflection)
 add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
 add_test(NAME gg_synctest_fafnir_into_tyrant_rave
-    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/synctest_8f_fafnir_tyrant_rave.ggr --check --synctest 8
+    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/synctest_8f_fafnir_tyrant_rave.ggr --synctest 8
 )
 set_tests_properties(gg_synctest_fafnir_into_tyrant_rave PROPERTIES
     TIMEOUT 60
 )
 add_test(NAME g_synctest_kliff_throw
-    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/synctest_1f_kliff_throw.ggr --check --synctest 1
+    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/synctest_1f_kliff_throw.ggr --synctest 1
+)
+set_tests_properties(g_synctest_kliff_throw PROPERTIES
+    TIMEOUT 60
+)
+add_test(NAME g_faust_taunt_rollback
+    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/faust_taunt.ggr --check --rollback 1155 927 --rollback 1251 935
 )
 set_tests_properties(g_synctest_kliff_throw PROPERTIES
     TIMEOUT 60
