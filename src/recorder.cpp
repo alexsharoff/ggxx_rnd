@@ -9,11 +9,11 @@
 #include <cwctype>
 #include <deque>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <utility>
 
 
-// TODO: save to file / load
 // TODO: record anywhere not just during training, but in menus etc
 namespace recorder
 {
@@ -48,9 +48,9 @@ constexpr bool operator!(const recorder_action a)
 
 std::deque<game_state> g_state_history;
 std::deque<std::array<uint16_t, 2>> g_input_history;
+std::deque<uint32_t> g_checksum_history;
 bool g_recording = false;
 bool g_playing = false;
-uint32_t g_checksum_end;
 int8_t g_speed = 1;
 bool g_manual_frame_advance = false;
 uint16_t g_prev_bitmask[] = {0, 0};
@@ -75,46 +75,134 @@ command_line g_cmd;
 
 static_assert(sizeof(wchar_t) == sizeof(uint16_t));
 
-template<class ContainerT>
-void read_input(const wchar_t* path, ContainerT& container)
+struct replay_header
+{
+    char id[3] = { 'G', 'G', 'R' };
+    uint8_t version[2] = { 0, 1 };
+    uint8_t reserved[55] = { 0 };
+    uint32_t body_size;
+};
+
+static_assert(sizeof(replay_header) == 64);
+
+struct replay_body_ver_01
+{
+    struct frame
+    {
+        uint16_t input[2];
+        uint32_t state_checksum;
+    };
+    static_assert(sizeof(frame) == 8);
+    std::vector<frame> frames;
+};
+
+bool read_replay_body_ver_01(
+    std::ifstream& ifs, const replay_header& header, replay_body_ver_01& body
+)
+{
+    body.frames.clear();
+    constexpr auto frame_size = sizeof(replay_body_ver_01::frame);
+    for (size_t i = 0; i < header.body_size / frame_size; ++i)
+    {
+        replay_body_ver_01::frame frame{};
+        if (!ifs.read(reinterpret_cast<char*>(&frame), frame_size))
+            return false;
+        body.frames.push_back(frame);
+    }
+    return true;
+}
+
+bool read_input(const wchar_t* path, std::wstring& error)
 {
     std::ifstream ifs(path, std::ifstream::binary);
     if (!ifs.is_open())
     {
-        const auto message = std::wstring(L"Cannot open file: ") + path;
-        show_message_box(message.c_str(), true);
-        std::exit(2);
+        error = std::wstring(L"Unable to open file: ") + path;
+        return false;
     }
 
-    size_t size = 0;
-    ifs.read(reinterpret_cast<char*>(&size), sizeof(size));
-    container.clear();
-    ifs.read(reinterpret_cast<char*>(&g_checksum_end), sizeof(g_checksum_end));
-    for (size_t i = 0; i < size; ++i)
+    constexpr wchar_t generic_error[] = L"Replay is invalid or corrupted.";
+
+    replay_header header{};
+    if (!ifs.read(reinterpret_cast<char*>(&header), sizeof(header)))
     {
-        std::array<uint16_t, 2> input{};
-        ifs.read(reinterpret_cast<char*>(&input[0]), 4);
-        container.push_back(input);
+        error = generic_error;
+        return false;
     }
+    if (header.id[0] != 'G' || header.id[1] != 'G' || header.id[2] != 'R')
+    {
+        error = generic_error;
+        return false;
+    }
+
+    const auto& ver = header.version;
+    if (ver[0] == 0 && ver[1] == 1)
+    {
+        replay_body_ver_01 body;
+        if (!read_replay_body_ver_01(ifs, header, body))
+        {
+            error = generic_error;
+            return false;
+        }
+        g_input_history.clear();
+        g_checksum_history.clear();
+        for (const auto& f : body.frames)
+        {
+            g_checksum_history.push_back(f.state_checksum);
+            g_input_history.push_back({f.input[0], f.input[1]});
+        }
+    }
+    else
+    {
+        std::wostringstream oss;
+        oss << L"Unsupported replay version: " << std::to_wstring(ver[0]) <<
+               '.' << std::to_wstring(ver[1]) << '.';
+        error = oss.str();
+        return false;
+    }
+
+    return true;
 }
 
-template<class ContainerT>
-void write_input(const wchar_t* path, const ContainerT& input)
+std::ofstream g_output_file;
+bool write_input(std::wstring& error)
 {
-    std::ofstream ofs(path, std::ofstream::trunc | std::ofstream::binary);
-    if (!ofs.is_open())
+    g_output_file.seekp(0);
+    replay_header header{};
+    constexpr auto frame_size = sizeof(replay_body_ver_01::frame);
+    header.body_size = g_input_history.size() * frame_size;
+    constexpr wchar_t generic_error[] = L"Write operation failed, replay may become corrupted.";
+    if (!g_output_file.write(reinterpret_cast<const char*>(&header), sizeof(header)))
     {
-        const auto message = std::wstring(L"Cannot open file: ") + path;
-        show_message_box(message.c_str(), true);
-        std::exit(2);
+        error = generic_error;
+        return false;
     }
-    size_t size = input.size();
-    ofs.write(reinterpret_cast<const char*>(&size), sizeof(size));
-    ofs.write(reinterpret_cast<const char*>(&g_checksum_end), sizeof(g_checksum_end));
-    for (const auto& item : input)
+
+    for (size_t i = 0; i < g_input_history.size(); ++i)
     {
-        ofs.write(reinterpret_cast<const char*>(&item), 4);
+        const auto& input = g_input_history[i];
+        replay_body_ver_01::frame frame{};
+        frame.input[0] = input[0];
+        frame.input[1] = input[1];
+        frame.state_checksum = g_checksum_history[i];
+        if (!g_output_file.write(reinterpret_cast<const char*>(&frame), frame_size))
+        {
+            error = generic_error;
+            return false;
+        }
     }
+    return true;
+}
+
+bool open_output_file(const wchar_t* path, std::wstring& error)
+{
+    g_output_file.open(path, std::ofstream::trunc | std::ofstream::binary);
+    if (!g_output_file.is_open())
+    {
+        error = std::wstring(L"Unable to open file: ") + path;
+        return false;
+    }
+    return true;
 }
 
 // TODO: this function is kind of a mess, split/simplify
@@ -125,26 +213,33 @@ bool input_hook(IGame* game)
         if (g_cmd.replay_record)
         {
             const auto frame = game->GetState().match2.clock.get();
-            g_checksum_end = state_checksum(game->GetState());
             if (g_input_history.size() <= frame)
+            {
                 g_input_history.resize(frame + 1);
+                g_checksum_history.resize(frame + 1);
+            }
+            g_checksum_history[frame] = state_checksum(game->GetState());
             g_input_history[frame] = game->GetInput();
-            write_input(g_cmd.replay_path.c_str(), g_input_history);
+            std::wstring error;
+            if (!write_input(error))
+            {
+                std::wcerr << error.c_str() << std::endl;
+            }
         }
         else
         {
             const auto frame = game->GetState().match2.clock.get();
-            if (frame == g_input_history.size() - 1 && g_cmd.replay_check)
-            {
-                if (g_checksum_end != state_checksum(game->GetState()))
-                {
-                    std::cerr << "state check failed" << std::endl;
-                    std::exit(1);
-                }
-            }
             if (frame >= g_input_history.size())
             {
                 std::exit(0);
+            }
+            if (g_cmd.replay_check)
+            {
+                if (g_checksum_history[frame] != state_checksum(game->GetState()))
+                {
+                    std::cerr << "State checksum mismatch at frame " << frame << std::endl;
+                    std::exit(1);
+                }
             }
             game->SetInput(g_input_history[frame]);
         }
@@ -450,8 +545,20 @@ void Initialize(IGame* game, recorder_config& cfg, const command_line& cmd)
 {
     g_cfg = cfg;
     g_cmd = cmd;
-    if (!g_cmd.replay_path.empty() && !g_cmd.replay_record)
-        read_input(g_cmd.replay_path.c_str(), g_input_history);
+    if (!g_cmd.replay_path.empty())
+    {
+        std::wstring error;
+        if (g_cmd.replay_record)
+            open_output_file(g_cmd.replay_path.c_str(), error);
+        else
+            read_input(g_cmd.replay_path.c_str(), error);
+
+        if (!error.empty())
+        {
+            show_message_box(error.c_str(), true);
+            std::exit(1);
+        }
+    }
 
     game->RegisterCallback(IGame::Event::AfterGetInput, input_hook);
     game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
