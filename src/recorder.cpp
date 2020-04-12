@@ -213,7 +213,7 @@ bool input_hook(IGame* game)
         }
     }
 
-    auto input = game->GetInput();
+    auto input = game->GetInputRemapped();
 
     // Frame stop logic:
     {
@@ -418,7 +418,8 @@ bool input_hook(IGame* game)
     }
 
     g_prev_action = action;
-    game->SetInput(input);
+    if (g_frame_stop.enabled || g_recorder.playing)
+        game->SetInputRemapped(input);
 
     return true;
 }

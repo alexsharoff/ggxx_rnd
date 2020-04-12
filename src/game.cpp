@@ -38,26 +38,11 @@ void get_raw_input_data(input_data* out)
     g_input[0] = input.keys[0];
     g_input[1] = input.keys[1];
 
-    const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
-    g_input[0] = g_game->RemapButtons(
-        g_input[0], controller_configs[0], game_config::default_controller_config
-    );
-    g_input[1] = g_game->RemapButtons(
-        g_input[1], controller_configs[1], game_config::default_controller_config
-    );
-
     for (const auto& func : g_callbacks[IGame::Event::AfterGetInput])
     {
         if (!func(g_game))
             return;
     }
-
-    g_input[0] = g_game->RemapButtons(
-        g_input[0], game_config::default_controller_config, controller_configs[0]
-    );
-    g_input[1] = g_game->RemapButtons(
-        g_input[1], game_config::default_controller_config, controller_configs[1]
-    );
 
     input.is_active[0] = 1;
     input.is_active[1] = 1;
@@ -319,6 +304,19 @@ public:
         return g_input;
     }
 
+    const std::array<uint16_t, 2> GetInputRemapped() const final
+    {
+        decltype(g_input) input;
+        const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
+        input[0] = g_game->RemapButtons(
+            g_input[0], controller_configs[0], game_config::default_controller_config
+        );
+        input[1] = g_game->RemapButtons(
+            g_input[1], controller_configs[1], game_config::default_controller_config
+        );
+        return input;
+    }
+
     void SetState(const game_state& state) final
     {
         g_state = state;
@@ -328,6 +326,17 @@ public:
     void SetInput(const std::array<uint16_t, 2>& input) final
     {
         g_input = input;
+    }
+
+    void SetInputRemapped(const std::array<uint16_t, 2>& input) final
+    {
+        const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
+        g_input[0] = g_game->RemapButtons(
+            input[0], game_config::default_controller_config, controller_configs[0]
+        );
+        g_input[1] = g_game->RemapButtons(
+            input[1], game_config::default_controller_config, controller_configs[1]
+        );
     }
 
     void DisplayPlayerStatusTicker(const char* message, uint32_t side) final
@@ -421,13 +430,13 @@ public:
         uint16_t result = input & directions;
 
         if (input & from.pk.bit)
-            input |= from.p.bit | from.k.bit;
+            input |= to.p.bit | to.k.bit;
         if (input & from.pd.bit)
-            input |= from.p.bit | from.d.bit;
+            input |= to.p.bit | to.d.bit;
         if (input & from.pks.bit)
-            input |= from.p.bit | from.k.bit | from.s.bit;
+            input |= to.p.bit | to.k.bit | to.s.bit;
         if (input & from.pksh.bit)
-            input |= from.p.bit | from.k.bit | from.s.bit | from.hs.bit;
+            input |= to.p.bit | to.k.bit | to.s.bit | to.hs.bit;
 
         if (input & from.p.bit)
             result |= to.p.bit;
@@ -524,7 +533,7 @@ public:
         game_tick();
     }
 
-    void GetInput(input_data* out) const final
+    void GetInputRaw(input_data* out) const final
     {
         get_raw_input_data(out);
     }

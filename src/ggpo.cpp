@@ -239,7 +239,7 @@ bool input_data_hook(IGame* game)
     if (!g_session || !g_during_match)
         return true;
 
-    auto input = game->GetInput();
+    auto input = game->GetInputRemapped();
 
     LIBGG_LOG() << std::endl;
 
@@ -267,7 +267,7 @@ bool input_data_hook(IGame* game)
     int disconnected = 0;
     GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)&input, 4, &disconnected));
 
-    game->SetInput(input);
+    game->SetInputRemapped(input);
 
     return true;
 }

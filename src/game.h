@@ -38,9 +38,11 @@ struct IGame
 
     virtual const game_state& GetState() const = 0;
     virtual const std::array<uint16_t, 2>& GetInput() const = 0;
+    virtual const std::array<uint16_t, 2> GetInputRemapped() const = 0;
 
     virtual void SetState(const game_state& state) = 0;
     virtual void SetInput(const std::array<uint16_t, 2>& input) = 0;
+    virtual void SetInputRemapped(const std::array<uint16_t, 2>& input) = 0;
 
     virtual void DisplayPlayerStatusTicker(const char* message, uint32_t side) = 0;
     virtual void DrawRect(uint32_t color, uint32_t x1, uint32_t y1,
@@ -66,7 +68,7 @@ struct IGame
     virtual const uint32_t GetSleepTime() const = 0;
 
     virtual void GameTick() const = 0;
-    virtual void GetInput(input_data* out) const = 0;
+    virtual void GetInputRaw(input_data* out) const = 0;
     virtual void ProcessInput() const = 0;
     virtual void ProcessObjects() const = 0;
     virtual int32_t LimitFps() const = 0;
