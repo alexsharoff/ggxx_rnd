@@ -38,11 +38,26 @@ void get_raw_input_data(input_data* out)
     g_input[0] = input.keys[0];
     g_input[1] = input.keys[1];
 
+    const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
+    g_input[0] = g_game->RemapButtons(
+        g_input[0], controller_configs[0], game_config::default_controller_config
+    );
+    g_input[1] = g_game->RemapButtons(
+        g_input[1], controller_configs[1], game_config::default_controller_config
+    );
+
     for (const auto& func : g_callbacks[IGame::Event::AfterGetInput])
     {
         if (!func(g_game))
             return;
     }
+
+    g_input[0] = g_game->RemapButtons(
+        g_input[0], game_config::default_controller_config, controller_configs[0]
+    );
+    g_input[1] = g_game->RemapButtons(
+        g_input[1], game_config::default_controller_config, controller_configs[1]
+    );
 
     input.is_active[0] = 1;
     input.is_active[1] = 1;
@@ -431,7 +446,18 @@ public:
         if (input & from.pause.bit)
             result |= to.pause.bit;
 
-        // TODO: remaining buttons
+        if (input & from.enemy_jump.bit)
+            result |= to.enemy_jump.bit;
+        if (input & from.enemy_walk.bit)
+            result |= to.enemy_walk.bit;
+        if (input & from.play_memory.bit)
+            result |= to.play_memory.bit;
+        if (input & from.rec_enemy.bit)
+            result |= to.rec_enemy.bit;
+        if (input & from.rec_player.bit)
+            result |= to.rec_player.bit;
+        if (input & from.switch_control.bit)
+            result |= to.switch_control.bit;
 
         return reverse_bytes(result);
     }

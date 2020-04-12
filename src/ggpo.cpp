@@ -261,25 +261,11 @@ bool input_data_hook(IGame* game)
     {
         g_saved_state_map[frame] = std::make_shared<game_state>(game->GetState());
     }
-    const auto& controller_configs = game->GetGameConfig().player_controller_config;
-    input[0] = game->RemapButtons(
-        input[0], controller_configs[0], game_config::default_controller_config
-    );
-    input[1] = game->RemapButtons(
-        input[1], controller_configs[1], game_config::default_controller_config
-    );
 
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[0], (void*)&input[0], 2));
     GGPO_CHECK(ggpo_add_local_input(g_session, g_player_handles[1], (void*)&input[1], 2));
     int disconnected = 0;
     GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)&input, 4, &disconnected));
-
-    input[0] = game->RemapButtons(
-        input[0], game_config::default_controller_config, controller_configs[0]
-    );
-    input[1] = game->RemapButtons(
-        input[1], game_config::default_controller_config, controller_configs[1]
-    );
 
     game->SetInput(input);
 
