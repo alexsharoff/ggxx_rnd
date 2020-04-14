@@ -167,7 +167,8 @@ struct reflect<match_state_2>
         &match_state_2::effect_data4,
         &match_state_2::effect_data5,
         &match_state_2::effect_data6,
-        &match_state_2::effect_data7
+        &match_state_2::effect_data7,
+        &match_state_2::tiddata_fls_index
     );
 };
 
@@ -233,6 +234,10 @@ void revert_state(size_t image_base, game_state& state)
     set_pallette_reset_bit(state);
     dump_unprotected(state.match, image_base);
     dump_unprotected(state.match2, image_base);
+    auto tiddata = static_cast<_tiddata*>(
+        ::FlsGetValue(state.match2.tiddata_fls_index.get())
+    );
+    tiddata->_holdrand = state.match2.rand_seed;
     for (const auto& fiber_state : state.fibers)
         fiber_mgmt::dump_state(fiber_state);
 }
@@ -241,6 +246,10 @@ void save_current_state(size_t image_base, game_state& state)
 {
     load(image_base, state.match);
     load(image_base, state.match2);
+    auto tiddata = static_cast<const _tiddata*>(
+        ::FlsGetValue(state.match2.tiddata_fls_index.get())
+    );
+    state.match2.rand_seed = tiddata->_holdrand;
     state.fibers.clear();
     for (const auto& f : state.match2.menu_fibers.get())
     {
@@ -315,6 +324,8 @@ uint32_t state_checksum(const game_state& state)
     //const auto extra_obj_begin = state.match.extra_objects.get().ptr.value().data;
     return
         hash ^
+        // TODO: update state checksum in replay files after uncommenting this
+        // std::hash<uint32_t>{}(state.match2.rand_seed) ^
         std::hash<uint32_t>{}(state.match2.clock.get()) ^
         std::hash<uint8_t>{}(state.match2.p1_rounds_won.get()) ^
         std::hash<uint8_t>{}(state.match2.p2_rounds_won.get()) ^

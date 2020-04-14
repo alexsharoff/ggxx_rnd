@@ -377,6 +377,15 @@ struct match_state
 static_assert(sizeof(player_controller_state) == 152);
 static_assert(sizeof(match_state().player_direction_timers.get()) == 144);
 
+// _tiddata layout:
+// * https://github.com/nicecoolwinter/learn_c/blob/aa31897008b3042f9e49f52beee21dd5ba7a5ec6/vc_lib_src/src/mtdll.h#L135
+// * we're only interested in 'unsigned long   _holdrand' (offset 0x14)
+struct _tiddata
+{
+    uint32_t _dontcare[5]; // 0
+    uint32_t _holdrand; // 14
+};
+
 // match_state split into two types:
 // cl.exe cannot handle so much templates and stops with an out of memory error.
 struct match_state_2
@@ -419,6 +428,16 @@ struct match_state_2
     memory_offset<float, 0x5113B0> effect_data5;
     memory_offset<uint32_t, 0x520DCC> effect_data6;
     memory_offset<data_size<0x48>, 0x5087A8> effect_data7;
+
+    // Address of fiber-local storage index for _tiddata structure.
+    // _tiddata contains rand() seed. Kliff's taunt (バカモン) employs
+    // rand() instead of Mersenne Twister (strange choice).
+    // rand() implementation:
+    // * https://github.com/nicecoolwinter/learn_c/blob/aa31897008b3042f9e49f52beee21dd5ba7a5ec6/vc_lib_src/src/rand.c#L58
+    memory_offset<uint32_t, 0x3C7D04> tiddata_fls_index;
+
+    // _tiddata::_holdrand
+    uint32_t rand_seed;
 };
 
 struct game_state
