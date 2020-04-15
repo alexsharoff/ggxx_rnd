@@ -23,7 +23,8 @@ using memory_dump::dump_unprotected;
 
 typedef LPVOID (WINAPI create_fiber_func_t)(SIZE_T, LPFIBER_START_ROUTINE, LPVOID);
 
-std::unordered_map<LPVOID, std::shared_ptr<fiber_state::refcount_>> g_fiber_map;
+std::unordered_map<LPVOID, std::shared_ptr<fiber_state::refcount_>> g_fiber_map_owner;
+std::unordered_map<LPVOID, std::weak_ptr<fiber_state::refcount_>> g_fiber_map_weak;
 
 size_t get_stack_size(LPVOID fiber)
 {
@@ -50,7 +51,7 @@ create_fiber_func_t* g_create_fiber_orig = nullptr;
 LPVOID WINAPI create_fiber_hook(SIZE_T stack_size, LPFIBER_START_ROUTINE func, LPVOID arg)
 {
     LPVOID fiber = g_create_fiber_orig(stack_size, func, arg);
-    assert(g_fiber_map.find(fiber) == g_fiber_map.end());
+    assert(g_fiber_map_weak.find(fiber) == g_fiber_map_weak.end());
     transfer_ownership(fiber);
     return fiber;
 }
@@ -58,7 +59,7 @@ LPVOID WINAPI create_fiber_hook(SIZE_T stack_size, LPFIBER_START_ROUTINE func, L
 delete_fiber_func_t* g_delete_fiber_orig = nullptr;
 VOID WINAPI delete_fiber_hook(LPVOID fiber)
 {
-    g_fiber_map.erase(fiber);
+    g_fiber_map_owner.erase(fiber);
 }
 
 }
@@ -95,7 +96,8 @@ void shutdown()
     );
     assert(res != nullptr);
 
-    g_fiber_map.clear();
+    g_fiber_map_weak.clear();
+    g_fiber_map_owner.clear();
 
     g_create_fiber_orig = nullptr;
     g_delete_fiber_orig = nullptr;
@@ -107,13 +109,15 @@ void load_state(LPVOID fiber, fiber_state& state)
 
     load(fiber, state.data);
     state.stack.clear();
-    auto& refcount = g_fiber_map[fiber];
+    auto found = g_fiber_map_weak.find(fiber);
+    assert(found != g_fiber_map_weak.end());
+    auto refcount = found->second.lock();
     const auto size = refcount->stack_size;
     state.stack.reserve(size);
     const auto begin = state.data.stack_begin;
     const auto end = state.data.stack_begin + size;
     std::copy(begin, end, std::back_inserter(state.stack));
-    state.refcount = refcount;
+    std::swap(state.refcount, refcount);
 }
 
 void dump_state(const fiber_state& state)
@@ -124,14 +128,34 @@ void dump_state(const fiber_state& state)
     std::copy(state.stack.begin(), state.stack.end(), state.data.stack_begin);
 }
 
+namespace
+{
+
+struct deleter
+{
+    void operator()(LPVOID fiber)
+    {
+        deleter_fiber_func(fiber);
+        g_fiber_map_weak.erase(fiber);
+    }
+    delete_fiber_func_t* deleter_fiber_func;
+    
+};
+
+}
+
 void transfer_ownership(LPVOID fiber)
 {
     assert(g_create_fiber_orig != nullptr);
 
-    if (g_fiber_map.find(fiber) == g_fiber_map.end())
-        g_fiber_map[fiber] = std::make_shared<fiber_state::refcount_>(
-            fiber, g_delete_fiber_orig, get_stack_size(fiber)
+    if (g_fiber_map_weak.find(fiber) == g_fiber_map_weak.end())
+    {
+        auto ptr = std::make_shared<fiber_state::refcount_>(
+            fiber, deleter{g_delete_fiber_orig}, get_stack_size(fiber)
         );
+        g_fiber_map_owner[fiber] = ptr;
+        g_fiber_map_weak[fiber] = ptr;
+    }
 }
 
 }

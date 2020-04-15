@@ -207,6 +207,51 @@ int test5(LPVOID main_fiber)
     return 0;
 }
 
+int test6(LPVOID main_fiber)
+{
+    fiber_arg arg = { false, main_fiber };
+    const auto fiber = ::CreateFiber(0, fiber_f, &arg);
+    fiber_mgmt::fiber_state state;
+    fiber_mgmt::load_state(fiber, state);
+    while (!arg.done)
+    {
+        ::SwitchToFiber(fiber);
+    }
+    TEST_EQ(arg.counter, 3);
+
+    // reference counter on fiber_state wasn't free'd, so DeleteFiber does nothing here
+    ::DeleteFiber(fiber);
+
+    // restore previous state
+    fiber_mgmt::dump_state(state);
+
+    fiber_mgmt::fiber_state state2;
+    arg.done = false;
+    // continue fiber execution from previous state
+    while (!arg.done)
+    {
+        ::SwitchToFiber(fiber);
+        // update state after DeleteFiber
+        if (!state2.refcount)
+        {
+            fiber_mgmt::load_state(fiber, state2);
+        }
+    }
+
+    // restore previous state
+    fiber_mgmt::dump_state(state2);
+    arg.done = false;
+    // continue fiber execution from previous state
+    while (!arg.done)
+    {
+        ::SwitchToFiber(fiber);
+    }
+
+    TEST_EQ(arg.counter, 8);
+
+    return 0;
+}
+
 int main()
 {
     const auto main_fiber = ::ConvertThreadToFiber(0);
@@ -251,6 +296,11 @@ int main()
 
     if (test5(main_fiber))
         return 8;
+
+    fiber_mgmt::init();
+    if (test6(main_fiber))
+        return 8;
+    fiber_mgmt::shutdown();
 
     return 0;
 }

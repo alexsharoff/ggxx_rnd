@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -27,7 +28,7 @@ struct fiber_state
     std::vector<size_t> stack;
     struct refcount_
     {
-        refcount_(LPVOID f_, delete_fiber_func_t* d_, size_t s_)
+        refcount_(LPVOID f_, std::function<void(LPVOID)> d_, size_t s_)
             : fiber(f_)
             , deleter(d_)
             , stack_size(s_)
@@ -37,7 +38,7 @@ struct fiber_state
             deleter(fiber);
         }
         LPVOID fiber;
-        delete_fiber_func_t* deleter;
+        std::function<void(LPVOID)> deleter;
         size_t stack_size;
     };
     std::shared_ptr<refcount_> refcount;
@@ -49,6 +50,13 @@ void init();
 void shutdown();
 
 void load_state(LPVOID fiber, fiber_state& state);
+
+// Use this function instead of load_state, if DeleteFiber
+// was previosly called for provided fiber.
+// I.e. resurrecting a previosly "dead" fiber that was
+// not completely deleted because it's reference counted
+// fiber_state was saved in user code.
+void update_state(fiber_state& state);
 
 void dump_state(const fiber_state& state);
 
