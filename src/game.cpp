@@ -178,8 +178,11 @@ void game_tick()
     }
 }
 
-uint32_t button_bitmask_to_icon_bitmask(uint32_t input, const active_object_state* obj)
+uint32_t button_bitmask_to_icon_bitmask(uint32_t input, const gg_char_state& state)
 {
+    active_object_state state_wrapper;
+    state_wrapper.char_state_ptr = &state;
+    const auto obj = &state_wrapper;
     auto f = g_global_data_orig.button_bitmask_to_icon_bitmask;
     __asm
     {
@@ -408,9 +411,10 @@ public:
         g_global_data_orig.write_special_font(text, x, y, z, flags, font, scale);
     }
 
-    void DrawPressedButtons(uint32_t input_bitmask, const active_object_state* player, uint32_t x, uint32_t y) final
+    void DrawPressedButtons(uint32_t input_bitmask, const gg_char_state& player_state, uint32_t x, uint32_t y) final
     {
-        const auto buttons = button_bitmask_to_icon_bitmask(input_bitmask, player);
+        // TODO: reimplement, this doesn't work in menus
+        const auto buttons = button_bitmask_to_icon_bitmask(input_bitmask, player_state);
         g_global_data_orig.draw_pressed_buttons(buttons, x, y, 3, 1);
     }
 

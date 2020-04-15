@@ -54,7 +54,7 @@ struct IGame
                                   uint8_t alpha, float scale) = 0;
     virtual void WriteSpecialFont(const char* text, float x, float y, float z,
                                   uint32_t flags, uint32_t font, float scale) = 0;
-    virtual void DrawPressedButtons(uint32_t input_bitmask, const active_object_state* player, uint32_t x, uint32_t y) = 0;
+    virtual void DrawPressedButtons(uint32_t input_bitmask, const gg_char_state& player_state, uint32_t x, uint32_t y) = 0;
     virtual void DrawPressedDirection(uint32_t input_bitmask, uint32_t x, uint32_t y) = 0;
     virtual uint16_t RemapButtons(uint16_t input, const game_config::controller_config& from,
                                   const game_config::controller_config& to) const = 0;

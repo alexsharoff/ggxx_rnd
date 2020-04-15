@@ -432,17 +432,17 @@ bool process_objects_hook(IGame* game)
         const auto& controller_state = game->GetState().match.controller_state.get();
         if (controller_state[0].bitmask_cur)
         {
+            const auto& player_state = game->GetState().match.character_state.get()[0];
             const auto input = controller_state[0].bitmask_cur;
-            const auto obj = (active_object_state**)(game->GetImageBase() + 0x516778);
             game->DrawPressedDirection(input, 140, 300);
-            game->DrawPressedButtons(input, *obj, 170, 300);
+            game->DrawPressedButtons(input, player_state, 170, 300);
         }
         if (controller_state[1].bitmask_cur)
         {
+            const auto& player_state = game->GetState().match.character_state.get()[1];
             const auto input = controller_state[1].bitmask_cur;
-            const auto obj = (active_object_state**)(game->GetImageBase() + 0x51A07C);
             game->DrawPressedDirection(input, 460, 300);
-            game->DrawPressedButtons(input, *obj, 490, 300);
+            game->DrawPressedButtons(input, player_state, 490, 300);
         }
 
         const auto frame = game->GetState().match2.clock.get();

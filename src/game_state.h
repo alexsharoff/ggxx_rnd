@@ -229,7 +229,7 @@ struct active_object_state
     uint8_t owner_id; // 27
     uint16_t unknown4; // 28
     uint16_t guard_status; // 2A
-    gg_char_state* char_state_ptr; // 2C
+    const gg_char_state* char_state_ptr; // 2C
     void* unknown_callback; // 30
     uint32_t unknown5[2]; // 34
     void* sprite_array_a; // 3C
