@@ -208,11 +208,6 @@ void dump_global_data(size_t memory_base, const gg_state& state)
     dump(state, memory_base);
 }
 
-void init_fiber_mgmt()
-{
-    fiber_mgmt::init();
-}
-
 // set palette reset bit
 // current palette may be incorrect after rollback
 // (lightning / fire effect)
@@ -227,10 +222,8 @@ void set_pallette_reset_bit(game_state& state)
         p2_char.palette_status_bitmask |= 0x400;
 }
 
-void revert_state(size_t image_base, game_state& state)
+void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service)
 {
-    // TODO: delete orphaned fibers
-
     set_pallette_reset_bit(state);
     dump_unprotected(state.match, image_base);
     dump_unprotected(state.match2, image_base);
@@ -238,11 +231,14 @@ void revert_state(size_t image_base, game_state& state)
         ::FlsGetValue(state.match2.tiddata_fls_index.get())
     );
     tiddata->_holdrand = state.match2.rand_seed;
-    for (const auto& fiber_state : state.fibers)
-        fiber_mgmt::dump_state(fiber_state);
+    if (service)
+    {
+        for (const auto& fiber_state : state.fibers)
+            service->restore(fiber_state);
+    }
 }
 
-void save_current_state(size_t image_base, game_state& state)
+void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service)
 {
     load(image_base, state.match);
     load(image_base, state.match2);
@@ -251,13 +247,16 @@ void save_current_state(size_t image_base, game_state& state)
     );
     state.match2.rand_seed = tiddata->_holdrand;
     state.fibers.clear();
-    for (const auto& f : state.match2.menu_fibers.get())
+    if (service)
     {
-        if (f.fiber)
+        for (const auto& f : state.match2.menu_fibers.get())
         {
-            fiber_mgmt::fiber_state fiber_state;
-            fiber_mgmt::load_state(f.fiber, fiber_state);
-            state.fibers.push_back(fiber_state);
+            if (f.fiber)
+            {
+                fiber_mgmt::fiber_state fiber_state;
+                service->load(f.fiber, fiber_state);
+                state.fibers.push_back(fiber_state);
+            }
         }
     }
 }

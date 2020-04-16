@@ -7,6 +7,9 @@
 #include <unordered_map>
 
 
+using fiber_mgmt::fiber_service;
+using fiber_mgmt::fiber_state;
+
 struct fiber_arg
 {
     bool done = false;
@@ -49,12 +52,12 @@ int test1(LPVOID main_fiber)
     return 0;
 }
 
-int test2(LPVOID main_fiber)
+int test2(LPVOID main_fiber, fiber_service::ptr_t service)
 {
     fiber_arg arg = { false, main_fiber };
     const auto fiber = ::CreateFiber(0, fiber_f, &arg);
-    fiber_mgmt::fiber_state state;
-    fiber_mgmt::load_state(fiber, state);
+    fiber_state state;
+    service->load(fiber, state);
     while (!arg.done)
     {
         ::SwitchToFiber(fiber);
@@ -62,7 +65,7 @@ int test2(LPVOID main_fiber)
     TEST_EQ(arg.counter, 3);
 
     // restore previous state
-    fiber_mgmt::dump_state(state);
+    service->restore(state);
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
@@ -76,13 +79,13 @@ int test2(LPVOID main_fiber)
     return 0;
 }
 
-int test3(LPVOID main_fiber, size_t n)
+int test3(LPVOID main_fiber, size_t n, fiber_service::ptr_t service)
 {
     std::vector<fiber_arg> fiber_args(n, { false, main_fiber });
     std::vector<LPVOID> fibers;
     for (size_t i = 0; i < n; ++i)
         fibers.push_back(::CreateFiber(0, fiber_f, &fiber_args[i]));
-    std::unordered_map<LPVOID, fiber_mgmt::fiber_state> state_map;
+    std::unordered_map<LPVOID, fiber_state> state_map;
     while (true)
     {
         bool all_done = true;
@@ -92,8 +95,8 @@ int test3(LPVOID main_fiber, size_t n)
             ::SwitchToFiber(fiber);
             if (state_map.find(fiber) == state_map.end())
             {
-                fiber_mgmt::fiber_state state;
-                fiber_mgmt::load_state(fiber, state);
+                fiber_state state;
+                service->load(fiber, state);
                 state_map[fiber] = state;
             }
             if (!fiber_args[i].done)
@@ -110,7 +113,7 @@ int test3(LPVOID main_fiber, size_t n)
     // restore previous state
     for (const auto fiber : fibers)
     {
-        fiber_mgmt::dump_state(state_map[fiber]);
+        service->restore(state_map[fiber]);
     }
     for (auto& arg : fiber_args)
         arg.done = false;
@@ -146,10 +149,10 @@ int test4(LPVOID main_fiber)
 {
     fiber_arg arg = { false, main_fiber };
     const auto fiber = ::CreateFiber(0, fiber_f, &arg);
-    fiber_mgmt::fiber_state state;
-    fiber_mgmt::init();
-    fiber_mgmt::transfer_ownership(fiber);
-    fiber_mgmt::load_state(fiber, state);
+    auto service = fiber_service::start();
+    fiber_state state;
+    service->transfer_ownership(fiber);
+    service->load(fiber, state);
     while (!arg.done)
     {
         ::SwitchToFiber(fiber);
@@ -157,7 +160,7 @@ int test4(LPVOID main_fiber)
     TEST_EQ(arg.counter, 3);
 
     // restore previous state
-    fiber_mgmt::dump_state(state);
+    service->restore(state);
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
@@ -167,8 +170,6 @@ int test4(LPVOID main_fiber)
     ::DeleteFiber(fiber);
     TEST_EQ(arg.counter, 6);
 
-    fiber_mgmt::shutdown();
-
     return 0;
 }
 
@@ -176,23 +177,22 @@ int test5(LPVOID main_fiber)
 {
     fiber_arg arg = { false, main_fiber };
     const auto fiber = ::CreateFiber(0, fiber_f, &arg);
-    fiber_mgmt::fiber_state state;
-    bool init = true;
+    fiber_service::ptr_t service;
+    fiber_state state;
     while (!arg.done)
     {
         ::SwitchToFiber(fiber);
-        if (init)
+        if (!service)
         {
-            fiber_mgmt::init();
-            fiber_mgmt::transfer_ownership(fiber);
-            fiber_mgmt::load_state(fiber, state);
-            init = false;
+            service = fiber_service::start();
+            service->transfer_ownership(fiber);
+            service->load(fiber, state);
         }
     }
     TEST_EQ(arg.counter, 3);
 
     // restore previous state
-    fiber_mgmt::dump_state(state);
+    service->restore(state);
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
@@ -202,17 +202,15 @@ int test5(LPVOID main_fiber)
     ::DeleteFiber(fiber);
     TEST_EQ(arg.counter, 5);
 
-    fiber_mgmt::shutdown();
-
     return 0;
 }
 
-int test6(LPVOID main_fiber)
+int test6(LPVOID main_fiber, fiber_service::ptr_t service)
 {
     fiber_arg arg = { false, main_fiber };
     const auto fiber = ::CreateFiber(0, fiber_f, &arg);
-    fiber_mgmt::fiber_state state;
-    fiber_mgmt::load_state(fiber, state);
+    fiber_state state;
+    service->load(fiber, state);
     while (!arg.done)
     {
         ::SwitchToFiber(fiber);
@@ -223,23 +221,23 @@ int test6(LPVOID main_fiber)
     ::DeleteFiber(fiber);
 
     // restore previous state
-    fiber_mgmt::dump_state(state);
+    service->restore(state);
 
-    fiber_mgmt::fiber_state state2;
+    fiber_state state2;
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
     {
         ::SwitchToFiber(fiber);
         // update state after DeleteFiber
-        if (!state2.refcount)
+        if (!state2.shared)
         {
-            fiber_mgmt::load_state(fiber, state2);
+            service->load(fiber, state2);
         }
     }
 
     // restore previous state
-    fiber_mgmt::dump_state(state2);
+    service->restore(state2);
     arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
@@ -258,38 +256,43 @@ int main()
     if (test1(main_fiber))
         return 1;
 
-    fiber_mgmt::init();
-    for (int i = 0; i < 3; ++i)
     {
-        if (test1(main_fiber))
-            return 2;
+        auto service = fiber_service::start();
+        for (int i = 0; i < 3; ++i)
+        {
+            if (test1(main_fiber))
+                return 2;
+        }
     }
-    fiber_mgmt::shutdown();
 
-    fiber_mgmt::init();
-    // init/shutdown cycle without work
-    fiber_mgmt::shutdown();
-
-    fiber_mgmt::init();
-    if (test2(main_fiber))
-        return 3;
-    fiber_mgmt::shutdown();
-
-    fiber_mgmt::init();
-    if (test3(main_fiber, 5))
-        return 4;
-    fiber_mgmt::shutdown();
-
-    fiber_mgmt::init();
-    for (int i = 0; i < 3; ++i)
     {
-        if (test2(main_fiber))
-            return 5;
-
-        if (test3(main_fiber, 5))
-            return 6;
+        auto service = fiber_service::start();
+        // init/shutdown cycle without work
     }
-    fiber_mgmt::shutdown();
+
+    {
+        auto service = fiber_service::start();
+        if (test2(main_fiber, service))
+            return 3;
+    }
+
+    {
+        auto service = fiber_service::start();
+        if (test3(main_fiber, 5, service))
+            return 4;
+    }
+
+    {
+        auto service = fiber_service::start();
+        for (int i = 0; i < 3; ++i)
+        {
+            if (test2(main_fiber, service))
+                return 5;
+
+            if (test3(main_fiber, 5, service))
+                return 6;
+        }
+    }
 
     if (test4(main_fiber))
         return 7;
@@ -297,10 +300,11 @@ int main()
     if (test5(main_fiber))
         return 8;
 
-    fiber_mgmt::init();
-    if (test6(main_fiber))
-        return 8;
-    fiber_mgmt::shutdown();
+    {
+        auto service = fiber_service::start();
+        if (test6(main_fiber, service))
+            return 9;
+    }
 
     return 0;
 }

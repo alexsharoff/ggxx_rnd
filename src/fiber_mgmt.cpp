@@ -4,12 +4,7 @@
 #include "memory_dump.h"
 
 #include <limits>
-#include <string>
-#include <unordered_map>
-
-
-// 64-bit is not supported
-static_assert(sizeof(size_t) == 4);
+#include <stdexcept>
 
 
 namespace fiber_mgmt
@@ -18,20 +13,14 @@ namespace fiber_mgmt
 namespace
 {
 
-using memory_dump::load;
-using memory_dump::dump_unprotected;
-
-typedef LPVOID (WINAPI create_fiber_func_t)(SIZE_T, LPFIBER_START_ROUTINE, LPVOID);
-
-std::unordered_map<LPVOID, std::shared_ptr<fiber_state::refcount_>> g_fiber_map_owner;
-std::unordered_map<LPVOID, std::weak_ptr<fiber_state::refcount_>> g_fiber_map_weak;
+fiber_service* g_service = nullptr;
 
 size_t get_stack_size(LPVOID fiber)
 {
-    fiber_state::data_ data;
-    load(fiber, data);
-    size_t* end = data.esp;
-    if ((size_t)data.seh_record != std::numeric_limits<size_t>::max())
+    fiber_state::mutable_state state;
+    memory_dump::load(fiber, state);
+    size_t* end = state.esp;
+    if ((size_t)state.seh_record != std::numeric_limits<size_t>::max())
     {
         // If seh_record is valid, it means that SwitchToFiber
         // was called at least once for current fiber.
@@ -42,120 +31,137 @@ size_t get_stack_size(LPVOID fiber)
         // it's highly inlikely that anything below it
         // is going to be overwritten during normal fiber
         // execution.
-        end = data.seh_record;
+        end = state.seh_record;
     }
-    return end - data.stack_begin + 1;
+    return end - state.stack_begin + 1;
 }
 
-create_fiber_func_t* g_create_fiber_orig = nullptr;
 LPVOID WINAPI create_fiber_hook(SIZE_T stack_size, LPFIBER_START_ROUTINE func, LPVOID arg)
 {
-    LPVOID fiber = g_create_fiber_orig(stack_size, func, arg);
-    assert(g_fiber_map_weak.find(fiber) == g_fiber_map_weak.end());
-    transfer_ownership(fiber);
-    return fiber;
+    assert(g_service != nullptr);
+    return g_service->create_fiber(stack_size, func, arg);
 }
 
-delete_fiber_func_t* g_delete_fiber_orig = nullptr;
 VOID WINAPI delete_fiber_hook(LPVOID fiber)
 {
-    g_fiber_map_owner.erase(fiber);
+    assert(g_service != nullptr);
+    g_service->release(fiber);
 }
 
 }
 
-void init()
+fiber_service::ptr_t fiber_service::start()
 {
-    assert(g_create_fiber_orig == nullptr);
-
-    auto import = ::GetProcAddress(::GetModuleHandleA("kernel32.dll"), "CreateFiber");
-    assert(import);
-    g_create_fiber_orig = (create_fiber_func_t*)PatchIAT(
-        ::GetModuleHandle(NULL), import, create_fiber_hook
-    );
-    assert(g_create_fiber_orig);
-
-    import = ::GetProcAddress(::GetModuleHandleA("kernel32.dll"), "DeleteFiber");
-    assert(import);
-    g_delete_fiber_orig = (delete_fiber_func_t*)PatchIAT(
-        ::GetModuleHandle(NULL), import, delete_fiber_hook
-    );
-    assert(g_delete_fiber_orig);
+    return std::make_shared<fiber_service>(ctor_key{0});
 }
 
-void shutdown()
+fiber_service::fiber_service(const ctor_key&)
 {
-    assert(g_create_fiber_orig != nullptr);
+    assert(!g_service);
+
+    auto import_func = ::GetProcAddress(::GetModuleHandleA("kernel32.dll"), "CreateFiber");
+    assert(import_func);
+    m_create_fiber_func = (create_fiber_func_t*)PatchIAT(
+        ::GetModuleHandle(NULL), import_func, create_fiber_hook
+    );
+    assert(m_create_fiber_func);
+
+    import_func = ::GetProcAddress(::GetModuleHandleA("kernel32.dll"), "DeleteFiber");
+    assert(import_func);
+    m_delete_fiber_func = (delete_fiber_func_t*)PatchIAT(
+        ::GetModuleHandle(NULL), import_func, delete_fiber_hook
+    );
+    assert(m_delete_fiber_func);
+
+    g_service = this;
+}
+
+fiber_service::~fiber_service()
+{
+    assert(g_service != nullptr);
+
+    m_weak_map.clear();
+    m_owner_map.clear();
 
     auto res = PatchIAT(
-        ::GetModuleHandle(NULL), create_fiber_hook, g_create_fiber_orig
+        ::GetModuleHandle(NULL), create_fiber_hook, m_create_fiber_func
     );
     assert(res != nullptr);
+
     res = PatchIAT(
-        ::GetModuleHandle(NULL), delete_fiber_hook, g_delete_fiber_orig
+        ::GetModuleHandle(NULL), delete_fiber_hook, m_delete_fiber_func
     );
     assert(res != nullptr);
 
-    g_fiber_map_weak.clear();
-    g_fiber_map_owner.clear();
-
-    g_create_fiber_orig = nullptr;
-    g_delete_fiber_orig = nullptr;
+    g_service = nullptr;
 }
 
-void load_state(LPVOID fiber, fiber_state& state)
+void fiber_service::load(LPVOID fiber, fiber_state& state) const
 {
-    assert(g_create_fiber_orig != nullptr);
-
-    load(fiber, state.data);
+    memory_dump::load(fiber, state.data);
     state.stack.clear();
-    auto found = g_fiber_map_weak.find(fiber);
-    assert(found != g_fiber_map_weak.end());
-    auto refcount = found->second.lock();
-    const auto size = refcount->stack_size;
+    auto found = m_weak_map.find(fiber);
+    assert(found != m_weak_map.end());
+    state.shared = found->second.lock();
+    const auto size = state.shared->stack_size;
     state.stack.reserve(size);
     const auto begin = state.data.stack_begin;
     const auto end = state.data.stack_begin + size;
     std::copy(begin, end, std::back_inserter(state.stack));
-    std::swap(state.refcount, refcount);
 }
 
-void dump_state(const fiber_state& state)
+void fiber_service::restore(const fiber_state& state) const
 {
-    assert(g_create_fiber_orig != nullptr);
-
-    dump_unprotected(state.data, state.refcount->fiber);
+    memory_dump::dump_unprotected(state.data, state.shared->fiber);
     std::copy(state.stack.begin(), state.stack.end(), state.data.stack_begin);
 }
 
-namespace
+LPVOID fiber_service::create_fiber(SIZE_T stack_size, LPFIBER_START_ROUTINE func, LPVOID arg)
 {
-
-struct deleter
-{
-    void operator()(LPVOID fiber)
+    LPVOID fiber = m_create_fiber_func(stack_size, func, arg);
+    if (fiber == NULL)
     {
-        deleter_fiber_func(fiber);
-        g_fiber_map_weak.erase(fiber);
+        auto error_id = ::GetLastError();
+        char message[1024] = {0};
+        auto res = ::FormatMessageA(
+            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            NULL, error_id, 0, (LPSTR)&message, sizeof(message), NULL
+        );
+        assert(res != 0);
+        throw std::runtime_error(message);
     }
-    delete_fiber_func_t* deleter_fiber_func;
-    
-};
-
+    transfer_ownership(fiber);
+    return fiber;
 }
 
-void transfer_ownership(LPVOID fiber)
+void fiber_service::transfer_ownership(LPVOID fiber)
 {
-    assert(g_create_fiber_orig != nullptr);
+    auto found = m_weak_map.find(fiber);
+    assert(found == m_weak_map.end());
+    auto ptr = std::make_shared<const const_fiber_state>(const_fiber_state{
+        fiber, get_stack_size(fiber), shared_from_this()
+    });
+    m_owner_map.emplace(fiber, ptr);
+    m_weak_map.emplace(fiber, ptr);
+}
 
-    if (g_fiber_map_weak.find(fiber) == g_fiber_map_weak.end())
-    {
-        auto ptr = std::make_shared<fiber_state::refcount_>(
-            fiber, deleter{g_delete_fiber_orig}, get_stack_size(fiber)
-        );
-        g_fiber_map_owner[fiber] = ptr;
-        g_fiber_map_weak[fiber] = ptr;
-    }
+void fiber_service::release(LPVOID fiber)
+{
+    m_owner_map.erase(fiber);
+}
+
+void fiber_service::destroy(LPVOID fiber)
+{
+    m_delete_fiber_func(fiber);
+    auto found = m_weak_map.find(fiber);
+    assert(found != m_weak_map.end());
+    m_weak_map.erase(found);
+}
+
+const_fiber_state::~const_fiber_state()
+{
+    if (service)
+        service->destroy(fiber);
 }
 
 }

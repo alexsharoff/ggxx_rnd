@@ -22,6 +22,7 @@ bool g_enable_fps_limit = true;
 size_t g_image_base = 0;
 std::unordered_map<IGame::Event, std::vector<IGame::CallbackFuncType>> g_callbacks;
 game_state g_state{};
+fiber_mgmt::fiber_service::ptr_t g_fiber_service;
 std::array<uint16_t, 2> g_input{};
 std::pair<IXACT3WaveBank*, int16_t> g_sound = { nullptr, static_cast<int16_t>(0) };
 uint32_t g_sleep_time = 0;
@@ -64,7 +65,7 @@ void process_objects()
     const auto f = *g_global_data_orig.process_objects.get().get();
     f();
 
-    save_current_state(g_image_base, g_state);
+    save_current_state(g_image_base, g_state, g_fiber_service.get());
 
     for (const auto& func : g_callbacks[IGame::Event::AfterProcessObjects])
     {
@@ -124,7 +125,7 @@ void game_tick()
             // Loading has ended
             g_is_loading = false;
 
-            init_fiber_mgmt();
+            g_fiber_service = fiber_mgmt::fiber_service::start();
 
             gg_state global_data;
             load_global_data(g_image_base, global_data);
@@ -323,7 +324,7 @@ public:
     void SetState(const game_state& state) final
     {
         g_state = state;
-        revert_state(g_image_base, g_state);
+        revert_state(g_image_base, g_state, g_fiber_service.get());
     }
 
     void SetInput(const std::array<uint16_t, 2>& input) final

@@ -555,8 +555,6 @@ struct gg_state
 void load_global_data(size_t memory_base, gg_state& state);
 void dump_global_data(size_t memory_base, const gg_state& state);
 
-// call once before revert_state / save_current_state
-void init_fiber_mgmt();
-void revert_state(size_t image_base, game_state& state);
-void save_current_state(size_t image_base, game_state& state);
+void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service = nullptr);
+void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service = nullptr);
 uint32_t state_checksum(const game_state& state);
