@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+
 project(libgg C CXX)
 
 # TODO: automate
@@ -69,43 +71,20 @@ set_target_properties(gg PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR
 
 add_test(NAME mini_reflection COMMAND test_mini_reflection)
 add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
-# TODO: add_gg_test function
-add_test(NAME gg_synctest_fafnir_into_tyrant_rave
-    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/synctest_8f_fafnir_tyrant_rave.ggr
-               --check
-               --synctest 8
-)
-set_tests_properties(gg_synctest_fafnir_into_tyrant_rave PROPERTIES
-    TIMEOUT 60
-)
-add_test(NAME gg_synctest_kliff_throw
-    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/synctest_1f_kliff_throw.ggr
-               --check
-               --synctest 1
-)
-set_tests_properties(gg_synctest_kliff_throw PROPERTIES
-    TIMEOUT 60
-)
-add_test(NAME gg_faust_taunt_rollback
-    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/faust_taunt.ggr
-               --check
-               --rollback 1155 927
-               --rollback 1251 935
-)
-set_tests_properties(gg_faust_taunt_rollback PROPERTIES
-    TIMEOUT 60
-)
-add_test(NAME gg_kliff_taunt_rollback
-    COMMAND gg --replay ${CMAKE_CURRENT_LIST_DIR}/replays/kliff_taunt.ggr
-               --check
-               --rollback 1270 950
-               --rollback 1270 1050
-               --rollback 1270 1150
-)
-set_tests_properties(gg_kliff_taunt_rollback PROPERTIES
-    TIMEOUT 60
-)
 #add_test(NAME memory_dump COMMAND test_memory_dump)
 #add_test(NAME diff COMMAND test_diff)
 #add_test(NAME binary_serializer COMMAND test_binary_serializer)
 #add_test(NAME pretty_print COMMAND test_pretty_print)
+
+include(add_gg_test)
+
+add_gg_test(synctest_8f_fafnir_tyrant_rave ARGS --check --synctest 8)
+add_gg_test(synctest_1f_kliff_throw ARGS --check --synctest 1)
+add_gg_test(faust_taunt ARGS --check --rollback 1155 927 --rollback 1251 935)
+add_gg_test(kliff_taunt ARGS
+    --check
+    --rollback 1270 950
+    --rollback 1270 1050
+    --rollback 1270 1150
+)
+add_gg_test(save_and_load ARGS --check)
