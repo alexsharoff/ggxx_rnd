@@ -284,11 +284,6 @@ enum class fiber_id : uint32_t
     match = 6
 };
 
-enum class main_menu_idx : uint32_t
-{
-    training = 7
-};
-
 struct match_state
 {
     memory_offset<gg_char_state[2], 0x51A038> character_state;
@@ -416,7 +411,7 @@ struct match_state_2
     memory_offset<fiber_id, 0x555FF4> next_fiber_id;
     memory_offset<bool, 0x50BF30> charselect_p1_enabled;
     memory_offset<bool, 0x50BF68> charselect_p2_enabled;
-    memory_offset<main_menu_idx, 0x5557B0> main_menu_idx;
+    memory_offset<uint32_t, 0x5557B0> main_menu_idx;
 
     // some of this data is required to avoid rng desync during rollback at
     // the beginning of fafnir -> tyrant rave (flashy effect uses rng)

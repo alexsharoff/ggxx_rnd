@@ -29,7 +29,7 @@ extern "C" __declspec(dllexport) void libgg_init()
         ggpo::Initialize(s_game.get(), cmd);
         recorder::Initialize(s_game.get(), cfg.recorder, cmd);
         training_mode_ex::Initialize(s_game.get(), cmd);
-        skip_intro::Initialize(s_game.get(), cmd);
+        skip_intro::Initialize(s_game.get(), cfg.skip_intro, cmd);
         sound_fix::Initialize(s_game.get(), cmd);
     }
 }

@@ -8,6 +8,6 @@
 namespace skip_intro
 {
 
-void Initialize(IGame* game, const command_line& cmd);
+void Initialize(IGame* game, const skip_intro_config& cfg, const command_line& cmd);
 
 }

@@ -23,14 +23,14 @@ struct command_line
     std::wstring displaycfg;
     std::wstring savedata;
     std::wstring libggcfg;
-    bool usedefaults;
+    bool usedefaults = false;
     enum class game_mode_t : uint8_t
     {
         default = 0,
         vs2p = 1,
         training = 2,
         network = 3
-    } game_mode;
+    } game_mode = game_mode_t::default;
 };
 
 command_line parse_command_line();
