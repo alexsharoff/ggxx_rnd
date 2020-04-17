@@ -14,7 +14,7 @@ namespace fiber_mgmt
 {
 
 struct fiber_state;
-struct const_fiber_state;
+struct immutable_fiber_state;
 
 class fiber_service : public std::enable_shared_from_this<fiber_service>
 {
@@ -34,16 +34,18 @@ public:
     void transfer_ownership(LPVOID fiber);
     void release(LPVOID fiber);
 
-    explicit fiber_service(const ctor_key&);
+    explicit fiber_service(const ctor_key&); // essentially private ctor
     ~fiber_service();
     fiber_service(const fiber_service&) = delete;
+    fiber_service(fiber_service&&) = delete;
     fiber_service& operator=(const fiber_service&) = delete;
+    fiber_service& operator=(fiber_service&&) = delete;
 
 private:
     void destroy(LPVOID fiber);
 
-    using owner_map_t = std::unordered_map<LPVOID, std::shared_ptr<const const_fiber_state>>;
-    using weak_map_t = std::unordered_map<LPVOID, std::weak_ptr<const const_fiber_state>>;
+    using owner_map_t = std::unordered_map<LPVOID, std::shared_ptr<const immutable_fiber_state>>;
+    using weak_map_t = std::unordered_map<LPVOID, std::weak_ptr<const immutable_fiber_state>>;
 
     owner_map_t m_owner_map;
     weak_map_t m_weak_map;
@@ -56,16 +58,17 @@ private:
     create_fiber_func_t* m_create_fiber_func;
     delete_fiber_func_t* m_delete_fiber_func;
 
-    friend const_fiber_state;
+    friend immutable_fiber_state;
 };
 
-struct const_fiber_state
+struct immutable_fiber_state
 {
-    const_fiber_state(const const_fiber_state&) = default;
-    const_fiber_state(const_fiber_state&&) = default;
-    const_fiber_state& operator=(const const_fiber_state&) = default;
-    const_fiber_state& operator=(const_fiber_state&&) = default;
-    ~const_fiber_state();
+    immutable_fiber_state(LPVOID fiber, size_t stack_size, fiber_service::ptr_t service);
+    immutable_fiber_state(const immutable_fiber_state&) = default;
+    immutable_fiber_state(immutable_fiber_state&&) = default;
+    immutable_fiber_state& operator=(const immutable_fiber_state&) = default;
+    immutable_fiber_state& operator=(immutable_fiber_state&&) = default;
+    ~immutable_fiber_state();
     LPVOID fiber;
     size_t stack_size;
     fiber_service::ptr_t service;
@@ -84,7 +87,7 @@ struct fiber_state
         uint8_t pad4[0x21C]; // DC
     } data; // 2F8
     std::vector<size_t> stack;
-    std::shared_ptr<const const_fiber_state> shared;
+    std::shared_ptr<const immutable_fiber_state> shared;
 };
 static_assert(sizeof(fiber_state::mutable_state) == 0x2f8);
 

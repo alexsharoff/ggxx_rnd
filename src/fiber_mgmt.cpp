@@ -3,6 +3,7 @@
 #include "patch_iat.h"
 #include "memory_dump.h"
 
+#include <cassert>
 #include <limits>
 #include <stdexcept>
 
@@ -17,10 +18,10 @@ fiber_service* g_service = nullptr;
 
 size_t get_stack_size(LPVOID fiber)
 {
-    fiber_state::mutable_state state;
-    memory_dump::load(fiber, state);
-    size_t* end = state.esp;
-    if ((size_t)state.seh_record != std::numeric_limits<size_t>::max())
+    assert(fiber != nullptr);
+    auto state = reinterpret_cast<const fiber_state::mutable_state*>(fiber);
+    size_t* end = state->esp;
+    if ((size_t)state->seh_record != std::numeric_limits<size_t>::max())
     {
         // If seh_record is valid, it means that SwitchToFiber
         // was called at least once for current fiber.
@@ -31,9 +32,9 @@ size_t get_stack_size(LPVOID fiber)
         // it's highly inlikely that anything below it
         // is going to be overwritten during normal fiber
         // execution.
-        end = state.seh_record;
+        end = state->seh_record;
     }
-    return end - state.stack_begin + 1;
+    return end - state->stack_begin + 1;
 }
 
 LPVOID WINAPI create_fiber_hook(SIZE_T stack_size, LPFIBER_START_ROUTINE func, LPVOID arg)
@@ -138,9 +139,9 @@ void fiber_service::transfer_ownership(LPVOID fiber)
 {
     auto found = m_weak_map.find(fiber);
     assert(found == m_weak_map.end());
-    auto ptr = std::make_shared<const const_fiber_state>(const_fiber_state{
+    auto ptr = std::make_shared<const immutable_fiber_state>(
         fiber, get_stack_size(fiber), shared_from_this()
-    });
+    );
     m_owner_map.emplace(fiber, ptr);
     m_weak_map.emplace(fiber, ptr);
 }
@@ -158,7 +159,16 @@ void fiber_service::destroy(LPVOID fiber)
     m_weak_map.erase(found);
 }
 
-const_fiber_state::~const_fiber_state()
+immutable_fiber_state::immutable_fiber_state(
+    LPVOID fiber_, size_t stack_size_, fiber_service::ptr_t service_
+) : fiber(fiber_), stack_size(stack_size_), service(service_)
+{
+    assert(fiber != nullptr);
+    assert(stack_size != 0);
+    assert(service != nullptr);
+}
+
+immutable_fiber_state::~immutable_fiber_state()
 {
     if (service)
         service->destroy(fiber);
