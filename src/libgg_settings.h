@@ -36,5 +36,5 @@ struct skip_intro_settings
     // TODO: defaults should not change game behavior
     uint8_t enabled = true;
     uint8_t menu_idx = 7;
-    uint8_t enter_menu = 0;
+    uint8_t enter_menu = false;
 };

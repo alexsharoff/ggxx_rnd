@@ -87,7 +87,8 @@ struct replay_header
 {
     char id[3] = { 'G', 'G', 'R' };
     uint8_t version[2] = { 0, 1 };
-    uint8_t reserved[55] = { 0 };
+    skip_intro_settings skip_intro;
+    uint8_t reserved[51] = { 0 };
     uint32_t body_size;
 };
 
@@ -159,6 +160,14 @@ bool read_replay_file(const wchar_t* path, std::wstring& error)
         return false;
     }
 
+    if (g_cfg->get_args().game_mode != libgg_args::game_mode_t::default)
+    {
+        // Allow overwriting game mode in replay using --gamemode argument
+        // This may allow using the same replay for local and networking testing
+        header.skip_intro.menu_idx = g_cfg->get_skip_intro_settings().menu_idx;
+    }
+    g_cfg->set_skip_intro_settings(header.skip_intro);
+
     return true;
 }
 
@@ -179,6 +188,7 @@ bool update_replay_file(std::wstring& error)
 {
     g_output_file.seekp(0);
     replay_header header{};
+    header.skip_intro = g_cfg->get_skip_intro_settings();
     constexpr auto frame_size = sizeof(replay_frame);
     header.body_size = g_recorder.history.size() * frame_size;
     constexpr wchar_t generic_error[] = L"Write operation failed, replay may become corrupted.";
