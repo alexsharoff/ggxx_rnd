@@ -402,6 +402,7 @@ bool input_hook(IGame* game)
                     if (g_recorder.history[frame].state_checksum != state_checksum(game->GetState()))
                     {
                         std::cerr << "State checksum mismatch at frame " << frame << std::endl;
+                        print_game_state(game->GetState());
                         std::exit(1);
                     }
                 }
