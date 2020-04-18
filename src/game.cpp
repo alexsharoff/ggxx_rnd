@@ -224,7 +224,7 @@ uint32_t direction_bitmask_to_icon_id(uint32_t input)
 class Game : public IGame
 {
 public:
-    Game(size_t image_base, const command_line& cmd) : m_isReady(false)
+    Game(size_t image_base, configuration* cfg) : m_isReady(false)
     {
         g_image_base = image_base;
 
@@ -238,7 +238,7 @@ public:
 
         AutoIncrementRng(false);
 
-        if (cmd.nographics)
+        if (cfg->get_args().nographics)
             EnableDrawing(false);
 
         g_game = this;
@@ -580,8 +580,8 @@ private:
     bool m_isReady;
 };
 
-std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, const command_line& cmd)
+std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, configuration* cfg)
 {
     assert(g_image_base == 0);
-    return std::make_shared<Game>(baseAddress, cmd);
+    return std::make_shared<Game>(baseAddress, cfg);
 }

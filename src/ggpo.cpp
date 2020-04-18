@@ -44,7 +44,7 @@ bool g_waiting_for_first_match = false;
 std::unordered_map<size_t, std::shared_ptr<game_state>> g_saved_state_map;
 size_t g_vs_2p_jmp_addr = 0;
 IGame* g_game = nullptr;
-command_line g_cmd;
+libgg_args g_cmd;
 
 void activate()
 {
@@ -345,14 +345,14 @@ bool sleep_hook(IGame* game)
 
 }
 
-void Initialize(IGame* game, const command_line& cmd)
+void Initialize(IGame* game, configuration* cfg)
 {
     game->RegisterCallback(IGame::Event::AfterGetInput, input_data_hook);
     game->RegisterCallback(IGame::Event::BeforeSleep, sleep_hook);
     game->RegisterCallback(IGame::Event::AfterGameTick, game_tick_end_hook);
     apply_patches(game->GetImageBase());
     g_game = game;
-    g_cmd = cmd;
+    g_cmd = cfg->get_args();
 }
 
 }

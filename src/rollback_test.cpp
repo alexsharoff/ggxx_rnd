@@ -12,7 +12,7 @@ namespace rollback_test
 namespace
 {
 
-command_line g_cmd;
+libgg_args g_cmd;
 std::unordered_map<uint32_t, std::optional<game_state>> g_state_map;
 
 bool input_hook(IGame* game)
@@ -41,10 +41,10 @@ bool input_hook(IGame* game)
 
 }
 
-void Initialize(IGame* game, const command_line& cmd)
+void Initialize(IGame* game, configuration* cfg)
 {
-    g_cmd = cmd;
-    for (const auto& [from, to] : cmd.rollback_map)
+    g_cmd = cfg->get_args();
+    for (const auto& [from, to] : g_cmd.rollback_map)
     {
         for (auto frame : to)
             g_state_map[frame] = std::nullopt;

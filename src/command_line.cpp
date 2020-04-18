@@ -152,26 +152,26 @@ std::vector<int> parse_integers(
     return integers;
 }
 
-command_line::game_mode_t parse_game_mode(
+libgg_args::game_mode_t parse_game_mode(
     std::vector<std::wstring>& args, const std::wstring& flag
 )
 {
     const auto result = parse_values(args, flag, 1);
     if (result.empty())
-        return command_line::game_mode_t::default;
+        return libgg_args::game_mode_t::default;
 
     const auto& str = result[1];
     if (str == L"vs2p")
     {
-        return command_line::game_mode_t::vs2p;
+        return libgg_args::game_mode_t::vs2p;
     }
     else if (str == L"network")
     {
-        return command_line::game_mode_t::network;
+        return libgg_args::game_mode_t::network;
     }
     else if (str == L"training")
     {
-        return command_line::game_mode_t::training;
+        return libgg_args::game_mode_t::training;
     }
     else
     {
@@ -184,9 +184,9 @@ command_line::game_mode_t parse_game_mode(
 
 }
 
-command_line parse_command_line()
+libgg_args parse_command_line()
 {
-    command_line cmd;
+    libgg_args cmd;
 
     auto args = get_command_line();
     if (!args.empty())

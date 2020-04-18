@@ -1,7 +1,6 @@
 #pragma once
 
-#include "command_line.h"
-#include "config.h"
+#include "configuration.h"
 #include "game_state.h"
 
 #include <array>
@@ -78,5 +77,5 @@ struct IGame
 
     virtual void RegisterCallback(Event event, CallbackFuncType f, CallbackPosition pos = CallbackPosition::Last) = 0;
 
-    static std::shared_ptr<IGame> Initialize(size_t baseAddress, const command_line& cmd);
+    static std::shared_ptr<IGame> Initialize(size_t baseAddress, configuration* cfg);
 };

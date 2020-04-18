@@ -1,13 +1,12 @@
 #pragma once
 
-#include "command_line.h"
-#include "config.h"
+#include "configuration.h"
 #include "game.h"
 
 
 namespace training_mode_ex
 {
 
-void Initialize(IGame* game, const command_line& cmd);
+void Initialize(IGame* game, configuration* cfg);
 
 }

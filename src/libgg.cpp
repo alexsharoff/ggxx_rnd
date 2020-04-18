@@ -2,8 +2,7 @@
 
 #include <Windows.h>
 
-#include "command_line.h"
-#include "config.h"
+#include "configuration.h"
 #include "game.h"
 #include "patches.h"
 #include "ggpo.h"
@@ -17,20 +16,20 @@
 extern "C" __declspec(dllexport) void libgg_init()
 {
     static std::shared_ptr<IGame> s_game;
+    static std::shared_ptr<configuration> s_cfg;
     if (!s_game)
     {
-        const auto cmd = parse_command_line();
-        auto cfg = load_config();
+        s_cfg = std::make_shared<configuration>();
 
         const auto image_base = (size_t)::GetModuleHandle(nullptr);
         apply_patches(image_base);
-        s_game = IGame::Initialize(image_base, cmd);
-        rollback_test::Initialize(s_game.get(), cmd);
-        ggpo::Initialize(s_game.get(), cmd);
-        recorder::Initialize(s_game.get(), cfg.recorder, cmd);
-        training_mode_ex::Initialize(s_game.get(), cmd);
-        skip_intro::Initialize(s_game.get(), cfg.skip_intro, cmd);
-        sound_fix::Initialize(s_game.get(), cmd);
+        s_game = IGame::Initialize(image_base, s_cfg.get());
+        rollback_test::Initialize(s_game.get(), s_cfg.get());
+        ggpo::Initialize(s_game.get(), s_cfg.get());
+        recorder::Initialize(s_game.get(), s_cfg.get());
+        training_mode_ex::Initialize(s_game.get(), s_cfg.get());
+        skip_intro::Initialize(s_game.get(), s_cfg.get());
+        sound_fix::Initialize(s_game.get(), s_cfg.get());
     }
 }
 

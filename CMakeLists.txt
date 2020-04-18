@@ -47,7 +47,7 @@ add_library(libgg SHARED
     src/sound_fix.cpp
     src/training_mode_ex.cpp
     src/command_line.cpp
-    src/config.cpp
+    src/configuration.cpp
     src/util.cpp
     src/rollback_test.cpp
 )
@@ -87,4 +87,3 @@ add_gg_test(kliff_taunt ARGS
     --rollback 1270 1050
     --rollback 1270 1150
 )
-add_gg_test(save_and_load ARGS --check)

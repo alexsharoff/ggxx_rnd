@@ -1,8 +1,6 @@
 
 #include "recorder.h"
 
-#include "command_line.h"
-#include "config.h"
 #include "util.h"
 
 #include <algorithm>
@@ -21,15 +19,15 @@ namespace recorder
 namespace
 {
 
-using recorder_action = recorder_config::recorder_action;
+using recorder_action = recorder_settings::recorder_action;
 
 constexpr recorder_action operator|(const recorder_action a, const recorder_action b)
 {
-    return static_cast<recorder_action>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+    return static_cast<recorder_action>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
 }
 constexpr recorder_action operator&(const recorder_action a, const recorder_action b)
 {
-    return static_cast<recorder_action>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+    return static_cast<recorder_action>(static_cast<uint16_t>(a) & static_cast<uint16_t>(b));
 }
 constexpr recorder_action& operator|=(recorder_action& a, const recorder_action b)
 {
@@ -43,7 +41,7 @@ constexpr recorder_action& operator&=(recorder_action& a, const recorder_action 
 }
 constexpr bool operator!(const recorder_action a)
 {
-    return static_cast<uint32_t>(a) == 0;
+    return static_cast<uint16_t>(a) == 0;
 }
 
 struct replay_frame
@@ -79,8 +77,9 @@ struct recorder_data
 } g_recorder;
 
 recorder_action g_prev_action{};
-recorder_config g_cfg;
-command_line g_cmd;
+using key_map_t = std::unordered_map<uint8_t, recorder_action>;
+key_map_t g_key_map;
+configuration* g_cfg;
 
 static_assert(sizeof(wchar_t) == sizeof(uint16_t));
 
@@ -206,7 +205,7 @@ bool input_hook(IGame* game)
     recorder_action action{};
     if (::GetForegroundWindow() == game->GetWindowHandle())
     {
-        for (const auto& [key, action_] : g_cfg.key_map)
+        for (const auto& [key, action_] : g_key_map)
         {
             if (::GetAsyncKeyState(key))
                 action |= action_;
@@ -338,7 +337,7 @@ bool input_hook(IGame* game)
     // Replay logic:
     {
         // Disable manual replay control if replay was provided via command line
-        if (g_cmd.replay_path.empty())
+        if (g_cfg->get_args().replay_path.empty())
         {
             if (!(g_prev_action & recorder_action::memory_1) && !!(action & recorder_action::memory_1))
             {
@@ -381,14 +380,14 @@ bool input_hook(IGame* game)
             const auto frame = game->GetState().match2.clock.get() - g_recorder.initial_frame;
             if (frame >= g_recorder.history.size())
             {
-                if (!g_cmd.replay_path.empty())
+                if (!g_cfg->get_args().replay_path.empty())
                     std::exit(0);
                 else
                     g_recorder.playing = false;
             }
             else
             {
-                if (g_cmd.replay_check)
+                if (g_cfg->get_args().replay_check)
                 {
                     if (g_recorder.history[frame].state_checksum != state_checksum(game->GetState()))
                     {
@@ -406,7 +405,7 @@ bool input_hook(IGame* game)
                 g_recorder.history.resize(frame + 1);
             g_recorder.history[frame].state_checksum = state_checksum(game->GetState());
             g_recorder.history[frame].input = input;
-            if (!g_cmd.replay_path.empty())
+            if (!g_cfg->get_args().replay_path.empty())
             {
                 std::wstring error;
                 if (!update_replay_file(error))
@@ -465,23 +464,32 @@ bool process_objects_hook(IGame* game)
     return true;
 }
 
+key_map_t get_key_map(const recorder_settings& settings)
+{
+    key_map_t map;
+    for (const auto [keycode, action] : settings.keyboard_config)
+        map[keycode] = action;
+    return map;
 }
 
-void Initialize(IGame* game, recorder_config& cfg, const command_line& cmd)
+}
+
+void Initialize(IGame* game, configuration* cfg)
 {
     g_cfg = cfg;
-    g_cmd = cmd;
-    if (!g_cmd.replay_path.empty())
+    g_key_map = get_key_map(cfg->get_recorder_settings());
+    const auto& args = g_cfg->get_args();
+    if (!args.replay_path.empty())
     {
         std::wstring error;
-        if (g_cmd.replay_record)
+        if (args.replay_record)
         {
-            open_replay_file(g_cmd.replay_path.c_str(), error);
+            open_replay_file(args.replay_path.c_str(), error);
             g_recorder.recording = true;
         }
         else
         {
-            read_replay_file(g_cmd.replay_path.c_str(), error);
+            read_replay_file(args.replay_path.c_str(), error);
             g_recorder.playing = true;
         }
 
