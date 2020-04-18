@@ -553,3 +553,4 @@ void dump_global_data(size_t memory_base, const gg_state& state);
 void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service = nullptr);
 void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service = nullptr);
 uint32_t state_checksum(const game_state& state);
+void print_game_state(const game_state& state);

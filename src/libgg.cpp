@@ -6,6 +6,7 @@
 #include "game.h"
 #include "patches.h"
 #include "ggpo.h"
+#include "print_state.h"
 #include "recorder.h"
 #include "rollback_test.h"
 #include "training_mode_ex.h"
@@ -24,6 +25,7 @@ extern "C" __declspec(dllexport) void libgg_init()
         const auto image_base = (size_t)::GetModuleHandle(nullptr);
         apply_patches(image_base);
         s_game = IGame::Initialize(image_base, s_cfg.get());
+        print_state::Initialize(s_game.get(), s_cfg.get());
         rollback_test::Initialize(s_game.get(), s_cfg.get());
         ggpo::Initialize(s_game.get(), s_cfg.get());
         recorder::Initialize(s_game.get(), s_cfg.get());

@@ -3,6 +3,7 @@
 #include <deque>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 
 struct libgg_args
@@ -28,4 +29,5 @@ struct libgg_args
         training = 2,
         network = 3
     } game_mode = game_mode_t::default;
+    std::vector<int> printstate;
 };

@@ -1,5 +1,8 @@
 #include "game_state.h"
 
+#include <iostream>
+
+
 using mini_reflection::reflect;
 using mini_reflection::member_tuple;
 
@@ -261,9 +264,10 @@ void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_
     }
 }
 
-uint32_t object_checksum(const active_object_state& obj, uint32_t seed = 0x83215609)
+// TODO: use memory_dump::for_each_member_addr here
+uint32_t object_checksum(const active_object_state& obj)
 {
-    return seed ^ std::hash<uint16_t>{}(obj.id)
+    return std::hash<uint16_t>{}(obj.id)
         ^ std::hash<uint8_t>{}(obj.facing)
         ^ std::hash<uint8_t>{}(obj.side)
         ^ std::hash<uint32_t>{}(obj.status_bitmask)
@@ -275,6 +279,15 @@ uint32_t object_checksum(const active_object_state& obj, uint32_t seed = 0x83215
         ^ std::hash<uint32_t>{}(obj.velocity_y);
 }
 
+uint32_t object_checksum(const gg_char_state& obj)
+{
+    return std::hash<uint16_t>{}(obj.stun_accumulator)
+        ^ std::hash<uint16_t>{}(obj.faint_countdown)
+        ^ std::hash<uint16_t>{}(obj.tension)
+        ^ std::hash<uint16_t>{}(obj.guard)
+        ^ std::hash<uint16_t>{}(obj.burst);
+}
+
 // TODO: implement proper (mini_reflection::for_each_member)
 uint32_t state_checksum(const game_state& state)
 {
@@ -283,24 +296,10 @@ uint32_t state_checksum(const game_state& state)
     auto& p2_char_state = state.match.character_state.get()[1];
     const auto& p1 = state.match.p1_character.get().ptr;
     if (p1.has_value())
-    {
-        hash = object_checksum(p1.value(), hash)
-            ^ std::hash<uint16_t>{}(p1_char_state.stun_accumulator)
-            ^ std::hash<uint16_t>{}(p1_char_state.faint_countdown)
-            ^ std::hash<uint16_t>{}(p1_char_state.tension)
-            ^ std::hash<uint16_t>{}(p1_char_state.guard)
-            ^ std::hash<uint16_t>{}(p1_char_state.burst);
-    }
+        hash ^= object_checksum(p1.value()) ^ object_checksum(p1_char_state);
     const auto& p2 = state.match.p2_character.get().ptr;
     if (p2.has_value())
-    {
-        hash = object_checksum(p2.value(), hash)
-            ^ std::hash<uint16_t>{}(p2_char_state.stun_accumulator)
-            ^ std::hash<uint16_t>{}(p2_char_state.faint_countdown)
-            ^ std::hash<uint16_t>{}(p2_char_state.tension)
-            ^ std::hash<uint16_t>{}(p2_char_state.guard)
-            ^ std::hash<uint16_t>{}(p2_char_state.burst);
-    }
+        hash ^= object_checksum(p2.value()) ^ object_checksum(p2_char_state);
 
     uint32_t next_fiber_id = static_cast<uint32_t>(state.match2.next_fiber_id.get());
     hash ^= std::hash<uint32_t>{}(next_fiber_id);
@@ -331,9 +330,73 @@ uint32_t state_checksum(const game_state& state)
         std::hash<uint32_t>{}(state.match2.round_end_bitmask.get()) ^
         std::hash<uint16_t>{}(state.match2.match_countdown.get()) ^
         std::hash<uint8_t>{}(state.match2.round_state.get()) ^
-        std::hash<uint32_t>{}(state.match2.round_end_bitmask.get()) ^
         std::hash<uint64_t>{}(rng1.index) ^
         std::hash<uint64_t>{}(rng1.data[rng1.index])^
         std::hash<uint64_t>{}(rng2.index) ^
         std::hash<uint64_t>{}(rng2.data[rng2.index]);
+}
+
+void print_object(const active_object_state& obj)
+{
+    std::cout
+        << "  object::id=" << obj.id << std::endl
+        << "    object::facing=" << (int)obj.facing << std::endl
+        << "    object::side=" << (int)obj.side << std::endl
+        << "    object::status_bitmask=" << obj.status_bitmask << std::endl
+        << "    object::health=" << obj.health << std::endl
+        << "    object::hitbox_count=" << (int)obj.hitbox_count << std::endl
+        << "    object::pos_x=" << obj.pos_x << std::endl
+        << "    object::pos_y=" << obj.pos_y << std::endl
+        << "    object::velocity_x=" << obj.velocity_x << std::endl
+        << "    object::velocity_y=" << obj.velocity_y << std::endl;
+}
+
+void print_object(const gg_char_state& obj)
+{
+    std::cout
+        << "    char::stun_accumulator=" << obj.stun_accumulator << std::endl
+        << "    char::faint_countdown=" << obj.faint_countdown << std::endl
+        << "    char::tension=" << obj.tension << std::endl
+        << "    char::guard=" << obj.guard << std::endl
+        << "    char::burst=" << obj.burst << std::endl;
+}
+
+// TODO: implement and use pretty_print.h here
+void print_game_state(const game_state& state)
+{
+    std::cout << "frame=" << state.match2.clock.get() << std::endl;
+    auto& p1_char_state = state.match.character_state.get()[0];
+    auto& p2_char_state = state.match.character_state.get()[1];
+    const auto& p1 = state.match.p1_character.get().ptr;
+    if (p1.has_value())
+    {
+        print_object(p1.value());
+        print_object(p1_char_state);
+    }
+    const auto& p2 = state.match.p2_character.get().ptr;
+    if (p2.has_value())
+    {
+        print_object(p2.value());
+        print_object(p2_char_state);
+    }
+
+    std::cout << "  next_fiber_id=" << (uint32_t)state.match2.next_fiber_id.get() << std::endl;
+    for (const auto& f : state.match2.menu_fibers.get())
+    {
+        if (f.status)
+            std::cout << "  fiber=" << f.name << ':' << f.status << std::endl;
+    }
+
+    const auto& rng1 = state.match2.rng1.get();
+    const auto& rng2 = state.match2.rng2.get();
+    std::cout
+        << "  rng1.index=" << rng1.index << std::endl
+        << "  rng1.value=" << rng1.data[rng1.index] << std::endl
+        << "  rng2.index=" << rng2.index << std::endl
+        << "  rng2.value=" << rng2.data[rng2.index] << std::endl
+        << "  p1_rounds_won=" << (int)state.match2.p1_rounds_won.get() << std::endl
+        << "  p2_rounds_won=" << (int)state.match2.p2_rounds_won.get() << std::endl
+        << "  match_countdown=" << state.match2.match_countdown.get() << std::endl
+        << "  round_end_bitmask=" << state.match2.round_end_bitmask.get() << std::endl
+        << "  round_state=" << (int)state.match2.round_state.get() << std::endl;
 }

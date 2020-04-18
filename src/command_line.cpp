@@ -44,7 +44,8 @@ L"Supported arguments:\n"
 "[--savedata <path>]\n"
 "[--libggcfg <path>]\n"
 "[--usedefaults]\n"
-"[--gamemode {vs2p | training | network}]"
+"[--gamemode {vs2p | training | network}]\n"
+"[--printstate <frame> [<frame> ...]]"
 ;
 
 void show_help(const wchar_t* reason = nullptr, bool is_error = false)
@@ -79,14 +80,26 @@ std::vector<std::wstring> parse_values(
     std::vector<std::wstring>& args, const std::wstring& flag, size_t size
 )
 {
-    const auto found = std::find(args.begin(), args.end(), flag);
-    const size_t remaining_args = args.size() - std::distance(args.begin(), found);
     std::vector<std::wstring> result;
-    if (found != args.end() && size < remaining_args)
+    const auto flat_it = std::find(args.begin(), args.end(), flag);
+    if (flat_it == args.end())
+        return result;
+    if (size == std::numeric_limits<size_t>::max())
     {
-        const auto end = found + size + 1;
-        result.assign(found, end);
-        args.erase(found, end);
+        // unbound number of args
+        // consume arguments until --flag is found
+        auto next_flag_it = std::find_if(flat_it + 1, args.end(), [](const std::wstring& str)
+        {
+            return str.size() >= 2 && str.substr(0, 2) == L"--";
+        });
+        size = std::distance(flat_it, next_flag_it) - 1;
+    }
+    const size_t remaining_args = args.size() - std::distance(args.begin(), flat_it);
+    if (flat_it != args.end() && size < remaining_args)
+    {
+        const auto end = flat_it + size + 1;
+        result.assign(flat_it, end);
+        args.erase(flat_it, end);
     }
     return result;
 }
@@ -223,6 +236,8 @@ libgg_args parse_command_line()
                 break;
             cmd.rollback_map[integers[0]].push_back(integers[1]);
         }
+
+        cmd.printstate = parse_integers(args, L"--printstate", std::numeric_limits<size_t>::max());
 
         cmd.replay_check = parse_option(args, L"--check");
         cmd.replay_update = parse_option(args, L"--update");
