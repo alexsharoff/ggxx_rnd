@@ -1,6 +1,6 @@
 function(add_gg_test NAME)
     cmake_parse_arguments(
-        PARSE_ARGV 1 _ "" "TIMEOUT" "ARGS"
+        PARSE_ARGV 1 "" "" "TIMEOUT" "ARGS"
     )
 
     set(test_name gg_${NAME})
