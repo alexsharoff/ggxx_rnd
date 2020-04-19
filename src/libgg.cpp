@@ -12,6 +12,7 @@
 #include "training_mode_ex.h"
 #include "skip_intro.h"
 #include "sound_fix.h"
+#include "util.h"
 
 
 extern "C" __declspec(dllexport) void libgg_init()
@@ -20,6 +21,8 @@ extern "C" __declspec(dllexport) void libgg_init()
     static std::shared_ptr<configuration> s_cfg;
     if (!s_game)
     {
+        attach_console();
+
         s_cfg = std::make_shared<configuration>();
 
         const auto image_base = (size_t)::GetModuleHandle(nullptr);

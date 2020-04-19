@@ -58,3 +58,5 @@ inline uint16_t reverse_bytes(uint16_t value)
 }
 
 void show_message_box(const wchar_t* message, bool error = false);
+
+void attach_console(bool create_console_if_not_found = false);
