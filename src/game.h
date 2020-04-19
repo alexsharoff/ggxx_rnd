@@ -25,6 +25,7 @@ struct IGame
         First,
         Last
     };
+    using input_t = std::array<uint16_t, 2>;
 
     virtual void EnableDrawing(bool enable) = 0;
     virtual void EnablePauseMenu(bool enable) = 0;
@@ -36,12 +37,12 @@ struct IGame
     virtual void AutoIncrementRng(bool enable) const = 0;
 
     virtual const game_state& GetState() const = 0;
-    virtual const std::array<uint16_t, 2>& GetInput() const = 0;
-    virtual const std::array<uint16_t, 2> GetInputRemapped() const = 0;
+    virtual const input_t& GetInput() const = 0;
+    virtual const input_t GetInputRemapped() const = 0;
 
     virtual void SetState(const game_state& state) = 0;
-    virtual void SetInput(const std::array<uint16_t, 2>& input) = 0;
-    virtual void SetInputRemapped(const std::array<uint16_t, 2>& input) = 0;
+    virtual void SetInput(const input_t& input) = 0;
+    virtual void SetInputRemapped(const input_t& input) = 0;
 
     virtual void DisplayPlayerStatusTicker(const char* message, uint32_t side) = 0;
     virtual void DrawRect(uint32_t color, uint32_t x1, uint32_t y1,

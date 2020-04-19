@@ -23,7 +23,7 @@ size_t g_image_base = 0;
 std::unordered_map<IGame::Event, std::vector<IGame::CallbackFuncType>> g_callbacks;
 game_state g_state{};
 fiber_mgmt::fiber_service::ptr_t g_fiber_service;
-std::array<uint16_t, 2> g_input{};
+IGame::input_t g_input{};
 std::pair<IXACT3WaveBank*, int16_t> g_sound = { nullptr, static_cast<int16_t>(0) };
 uint32_t g_sleep_time = 0;
 bool g_is_ready = false;
@@ -42,7 +42,7 @@ void get_raw_input_data(input_data* out)
     for (const auto& func : g_callbacks[IGame::Event::AfterGetInput])
     {
         if (!func(g_game))
-            return;
+            break;
     }
 
     input.is_active[0] = 1;
@@ -303,12 +303,12 @@ public:
         return g_state;
     }
 
-    const std::array<uint16_t, 2>& GetInput() const final
+    const input_t& GetInput() const final
     {
         return g_input;
     }
 
-    const std::array<uint16_t, 2> GetInputRemapped() const final
+    const input_t GetInputRemapped() const final
     {
         decltype(g_input) input;
         const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
@@ -327,12 +327,12 @@ public:
         revert_state(g_image_base, g_state, g_fiber_service.get());
     }
 
-    void SetInput(const std::array<uint16_t, 2>& input) final
+    void SetInput(const input_t& input) final
     {
         g_input = input;
     }
 
-    void SetInputRemapped(const std::array<uint16_t, 2>& input) final
+    void SetInputRemapped(const input_t& input) final
     {
         const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
         g_input[0] = g_game->RemapButtons(

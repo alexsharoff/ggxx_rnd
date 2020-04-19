@@ -46,7 +46,7 @@ constexpr bool operator!(const action a)
 
 struct replay_frame
 {
-    std::array<uint16_t, 2> input;
+    IGame::input_t input;
     uint32_t state_checksum;
 };
 static_assert(sizeof(replay_frame) == 8);
@@ -56,7 +56,7 @@ struct frame_stop_data
     struct saved_state
     {
         std::optional<game_state> state;
-        std::array<uint16_t, 2> input;
+        IGame::input_t input;
     };
     int8_t speed = 1;
     std::vector<saved_state> state_history;
@@ -64,7 +64,7 @@ struct frame_stop_data
     bool enabled = false;
     uint16_t speed_control_counter = 0;
     bool out_of_memory = false;
-    std::array<uint16_t, 2> prev_input;
+    IGame::input_t prev_input;
 } g_frame_stop;
 
 struct recorder_data

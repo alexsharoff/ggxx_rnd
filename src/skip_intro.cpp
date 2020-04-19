@@ -11,7 +11,7 @@ namespace
 
 configuration* g_cfg;
 bool g_skipped = false;
-bool g_restore_instruction = false;
+bool g_user_control = true;
 
 void enter_menu_automatically(size_t image_base, bool enable = true)
 {
@@ -20,21 +20,33 @@ void enter_menu_automatically(size_t image_base, bool enable = true)
     {
         uint8_t instr[] = {0x90, 0x90}; // nop nop
         memory_dump::dump(instr, instr_offset);
-        g_restore_instruction = true;
+        g_user_control = false;
     }
     else
     {
         uint8_t instr[] = {0x74, 0x49}; // jne +49
         memory_dump::dump(instr, instr_offset);
+        g_user_control = true;
     }
+}
+
+bool get_input_hook(IGame* game)
+{
+    if (!g_user_control)
+    {
+        game->SetInput(IGame::input_t{});
+        // remaining callbacks should be skipped
+        return false;
+    }
+
+    return true;
 }
 
 bool game_tick_hook(IGame* game)
 {
-    if (g_restore_instruction && !game->FindFiberByName("OPTION"))
+    if (!g_user_control && !game->FindFiberByName("OPTION"))
     {
         enter_menu_automatically(game->GetImageBase(), false);
-        g_restore_instruction = false;
     }
 
     const auto& cfg = g_cfg->get_skip_intro_settings();
@@ -69,6 +81,7 @@ bool game_tick_hook(IGame* game)
 void Initialize(IGame* game, configuration* cfg)
 {
     g_cfg = cfg;
+    game->RegisterCallback(IGame::Event::AfterGetInput, get_input_hook);
     game->RegisterCallback(IGame::Event::BeforeGameTick, game_tick_hook);
 }
 
