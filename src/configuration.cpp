@@ -6,7 +6,7 @@
 configuration::configuration()
 {
     m_args = parse_command_line();
-    m_settings.recorder = recorder_settings{};
+    m_settings.recorder = keyboard_mapping{};
 
     m_settings.skip_intro = skip_intro_settings{};
 
@@ -33,7 +33,7 @@ const skip_intro_settings& configuration::get_skip_intro_settings() const
     return m_settings.skip_intro;
 }
 
-const recorder_settings& configuration::get_recorder_settings() const
+const keyboard_mapping& configuration::get_keyboard_mapping() const
 {
     return m_settings.recorder;
 }

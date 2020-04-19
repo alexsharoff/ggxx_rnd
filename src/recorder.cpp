@@ -19,27 +19,27 @@ namespace recorder
 namespace
 {
 
-using recorder_action = recorder_settings::recorder_action;
+using action = keyboard_mapping::action;
 
-constexpr recorder_action operator|(const recorder_action a, const recorder_action b)
+constexpr action operator|(const action a, const action b)
 {
-    return static_cast<recorder_action>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
+    return static_cast<action>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b));
 }
-constexpr recorder_action operator&(const recorder_action a, const recorder_action b)
+constexpr action operator&(const action a, const action b)
 {
-    return static_cast<recorder_action>(static_cast<uint16_t>(a) & static_cast<uint16_t>(b));
+    return static_cast<action>(static_cast<uint16_t>(a) & static_cast<uint16_t>(b));
 }
-constexpr recorder_action& operator|=(recorder_action& a, const recorder_action b)
+constexpr action& operator|=(action& a, const action b)
 {
     a = a | b;
     return a;
 }
-constexpr recorder_action& operator&=(recorder_action& a, const recorder_action b)
+constexpr action& operator&=(action& a, const action b)
 {
     a = a & b;
     return a;
 }
-constexpr bool operator!(const recorder_action a)
+constexpr bool operator!(const action a)
 {
     return static_cast<uint16_t>(a) == 0;
 }
@@ -76,8 +76,8 @@ struct recorder_data
     size_t initial_frame = 0;
 } g_recorder;
 
-recorder_action g_prev_action{};
-using key_map_t = std::unordered_map<uint8_t, recorder_action>;
+action g_prev_action{};
+using key_map_t = std::unordered_map<uint8_t, action>;
 key_map_t g_key_map;
 configuration* g_cfg;
 
@@ -212,7 +212,7 @@ bool update_replay_file(std::wstring& error)
 // TODO: this function is kind of a mess, split/simplify
 bool input_hook(IGame* game)
 {
-    recorder_action action{};
+    action action{};
     if (::GetForegroundWindow() == game->GetWindowHandle())
     {
         for (const auto& [key, action_] : g_key_map)
@@ -226,7 +226,7 @@ bool input_hook(IGame* game)
 
     // Frame stop logic:
     {
-        if (!(g_prev_action & recorder_action::frame_pause) && !!(action & recorder_action::frame_pause))
+        if (!(g_prev_action & action::frame_pause) && !!(action & action::frame_pause))
         {
             g_frame_stop.enabled = !g_frame_stop.enabled;
             g_frame_stop.speed = g_frame_stop.enabled ? 0 : 1;
@@ -241,14 +241,14 @@ bool input_hook(IGame* game)
         bool speed_control_enabled = false;
         if (g_frame_stop.enabled)
         {
-            const bool backward = !!(action & recorder_action::backward);
-            const bool forward = !!(action & recorder_action::forward);
+            const bool backward = !!(action & action::backward);
+            const bool forward = !!(action & action::forward);
             if (backward || forward)
             {
                 speed_control_enabled = true;
-                if (forward && (!(g_prev_action & recorder_action::forward) || g_frame_stop.speed_control_counter > 60))
+                if (forward && (!(g_prev_action & action::forward) || g_frame_stop.speed_control_counter > 60))
                     g_frame_stop.speed = 1;
-                else if (backward && (!(g_prev_action & recorder_action::backward) || g_frame_stop.speed_control_counter > 60))
+                else if (backward && (!(g_prev_action & action::backward) || g_frame_stop.speed_control_counter > 60))
                     g_frame_stop.speed = -1;
                 else
                     g_frame_stop.speed = 0;
@@ -257,7 +257,7 @@ bool input_hook(IGame* game)
         }
         else
         {
-            if (!!(action & recorder_action::forward))
+            if (!!(action & action::forward))
             {
                 game->EnableFpsLimit(false);
             }
@@ -310,7 +310,7 @@ bool input_hook(IGame* game)
                 const uint16_t bitmask = reverse_bytes(input[i]);
                 if (g_frame_stop.enabled)
                 {
-                    if (!!(action & recorder_action::erase))
+                    if (!!(action & action::erase))
                     {
                         input[i] = 0;
                     }
@@ -349,9 +349,9 @@ bool input_hook(IGame* game)
         // Disable manual replay control if replay was provided via command line
         if (g_cfg->get_args().replay_path.empty())
         {
-            if (!(g_prev_action & recorder_action::memory_1) && !!(action & recorder_action::memory_1))
+            if (!(g_prev_action & action::memory_1) && !!(action & action::memory_1))
             {
-                if (!!(action & recorder_action::erase))
+                if (!!(action & action::erase))
                 {
                     g_recorder.history.clear();
                 }
@@ -409,7 +409,7 @@ bool input_hook(IGame* game)
                 input = g_recorder.history[frame].input;
             }
         }
-        else if (g_recorder.recording)
+        if (g_recorder.recording)
         {
             const auto frame = game->GetState().match2.clock.get() - g_recorder.initial_frame;
             if (g_recorder.history.size() <= frame)
@@ -475,10 +475,10 @@ bool process_objects_hook(IGame* game)
     return true;
 }
 
-key_map_t get_key_map(const recorder_settings& settings)
+key_map_t get_key_map(const keyboard_mapping& settings)
 {
     key_map_t map;
-    for (const auto [keycode, action] : settings.keyboard_config)
+    for (const auto [keycode, action] : settings.mapping)
         map[keycode] = action;
     return map;
 }
@@ -488,20 +488,20 @@ key_map_t get_key_map(const recorder_settings& settings)
 void Initialize(IGame* game, configuration* cfg)
 {
     g_cfg = cfg;
-    g_key_map = get_key_map(cfg->get_recorder_settings());
+    g_key_map = get_key_map(cfg->get_keyboard_mapping());
     const auto& args = g_cfg->get_args();
     if (!args.replay_path.empty())
     {
         std::wstring error;
-        if (args.replay_record)
-        {
-            open_replay_file(args.replay_path.c_str(), error);
-            g_recorder.recording = true;
-        }
-        else
+        if (!args.replay_record)
         {
             read_replay_file(args.replay_path.c_str(), error);
             g_recorder.playing = true;
+        }
+        if (args.replay_record || args.replay_update)
+        {
+            open_replay_file(args.replay_path.c_str(), error);
+            g_recorder.recording = true;
         }
 
         if (!error.empty())
