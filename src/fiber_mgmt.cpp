@@ -128,6 +128,7 @@ LPVOID fiber_service::create_fiber(SIZE_T stack_size, LPFIBER_START_ROUTINE func
             FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
             NULL, error_id, 0, (LPSTR)&message, sizeof(message), NULL
         );
+        (void)res;
         assert(res != 0);
         throw std::runtime_error(message);
     }
