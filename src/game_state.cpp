@@ -171,7 +171,8 @@ struct reflect<match_state_2>
         &match_state_2::effect_data5,
         &match_state_2::effect_data6,
         &match_state_2::effect_data7,
-        &match_state_2::tiddata_fls_index
+        &match_state_2::tiddata_fls_index,
+        &match_state_2::black_screen_opacity
     );
 };
 
@@ -188,6 +189,17 @@ struct reflect<gg_state>
         &gg_state::process_input,
         &gg_state::direct3d9,
         &gg_state::hwnd
+    );
+};
+
+template<>
+struct reflect<fiber_state>
+{
+    constexpr static auto members = member_tuple(
+        &fiber_state::pause_state,
+        &fiber_state::data1,
+        &fiber_state::data2,
+        &fiber_state::data3
     );
 };
 
@@ -238,6 +250,9 @@ void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_servic
     {
         for (const auto& fiber_state : state.fibers)
             service->restore(fiber_state);
+
+        if (!state.fibers.empty())
+            dump_unprotected(state.fiber_state, image_base);
     }
 }
 
@@ -261,6 +276,8 @@ void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_
                 state.fibers.push_back(fiber_state);
             }
         }
+        if (!state.fibers.empty())
+            load(image_base, state.fiber_state);
     }
 }
 

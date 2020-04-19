@@ -512,7 +512,7 @@ public:
         return game_mode & 0x3;
     }
 
-    bool FindFiberByName(const std::string& name) const final
+    bool FindFiberByName(const std::string_view& name) const final
     {
         const auto& fibers = g_state.match2.menu_fibers.get();
         for (const auto& f : fibers)

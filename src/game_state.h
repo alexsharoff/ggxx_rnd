@@ -372,6 +372,18 @@ struct match_state
 static_assert(sizeof(player_controller_state) == 152);
 static_assert(sizeof(match_state().player_direction_timers.get()) == 144);
 
+struct fiber_state
+{
+    // FIN
+    memory_offset<uint32_t, 0x55606c> pause_state;
+    // FIN
+    memory_offset<uint32_t, 0x5202e0> data1;
+    // FIN
+    memory_offset<float, 0x5202e4> data2;
+    // FIN, NXBT
+    memory_offset<uint32_t, 0x5202e8> data3;
+};
+
 // _tiddata layout:
 // * https://github.com/nicecoolwinter/learn_c/blob/aa31897008b3042f9e49f52beee21dd5ba7a5ec6/vc_lib_src/src/mtdll.h#L135
 // * we're only interested in 'unsigned long   _holdrand' (offset 0x14)
@@ -433,6 +445,10 @@ struct match_state_2
 
     // _tiddata::_holdrand
     uint32_t rand_seed;
+
+    // Used by FIN fiber (fades the screen to black
+    // when SELECT is pressed in training mode)
+    memory_offset<float, 0x51f22c> black_screen_opacity;
 };
 
 struct game_state
@@ -440,6 +456,7 @@ struct game_state
     match_state match;
     match_state_2 match2;
     std::vector<fiber_mgmt::fiber_state> fibers;
+    fiber_state fiber_state;
 };
 
 typedef void (process_input_func_t)();
