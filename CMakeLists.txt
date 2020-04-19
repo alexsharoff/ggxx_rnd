@@ -79,12 +79,16 @@ add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
 
 include(add_gg_test)
 
-add_gg_test(synctest_8f_fafnir_tyrant_rave ARGS --check --synctest 8)
-add_gg_test(synctest_1f_kliff_throw ARGS --check --synctest 1)
-add_gg_test(faust_taunt ARGS --check --rollback 1155 927 --rollback 1251 935)
-add_gg_test(kliff_taunt ARGS
+add_gg_test(vs2p_fafnir_tyrant_rave ARGS --gamemode network --check --synctest 8)
+add_gg_test(vs2p_kliff_throw ARGS --gamemode network --check --synctest 1)
+add_gg_test(vs2p_faust_taunt ARGS 
     --check
-    --rollback 1270 950
-    --rollback 1270 1050
-    --rollback 1270 1150
+    --rollback 1400 1050
+    --rollback 1460 1050
+)
+add_gg_test(training_kliff_taunt ARGS
+    --check
+    --rollback 672 650
+    --rollback 695 600
+    --rollback 760 475
 )
