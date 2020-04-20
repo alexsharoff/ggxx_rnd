@@ -339,8 +339,7 @@ uint32_t state_checksum(const game_state& state)
     //const auto extra_obj_begin = state.match.extra_objects.get().ptr.value().data;
     return
         hash ^
-        // TODO: update state checksum in replay files after uncommenting this
-        // std::hash<uint32_t>{}(state.match2.rand_seed) ^
+        std::hash<uint32_t>{}(state.match2.rand_seed) ^
         std::hash<uint32_t>{}(state.match2.clock.get()) ^
         std::hash<uint8_t>{}(state.match2.p1_rounds_won.get()) ^
         std::hash<uint8_t>{}(state.match2.p2_rounds_won.get()) ^
@@ -407,6 +406,7 @@ void print_game_state(const game_state& state)
     const auto& rng1 = state.match2.rng1.get();
     const auto& rng2 = state.match2.rng2.get();
     std::cout
+        << "  rand() seed=" << state.match2.rand_seed << std::endl
         << "  rng1.index=" << rng1.index << std::endl
         << "  rng1.value=" << rng1.data[rng1.index] << std::endl
         << "  rng2.index=" << rng2.index << std::endl
