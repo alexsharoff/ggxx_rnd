@@ -5,6 +5,7 @@
 #include "xact_audio.h"
 
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 
@@ -323,6 +324,18 @@ public:
 
     void SetState(const game_state& state) final
     {
+        std::unordered_set<LPVOID> remaining_fibers;
+        for (const auto& f : state.fibers)
+            remaining_fibers.insert(f.shared->fiber);
+        for (const auto& f : g_state.fibers)
+        {
+            const auto fiber = f.shared->fiber;
+            if (remaining_fibers.find(fiber) != remaining_fibers.end())
+                continue;
+            // release orphaned fibers
+            g_fiber_service->release(fiber);
+        }
+
         g_state = state;
         revert_state(g_image_base, g_state, g_fiber_service.get());
     }
