@@ -1,0 +1,7 @@
+GGXXACPR_Win_Steamless.predictable-loading-time.1337
+
+GGXXACPR loads game resources at multiple points: at initialization, before main menu shows up, before match begins etc. Background workers are employed to load game resources (ie its async). Due to IO unpredictability, loading may take variable amount of frames, thus replaying inputs frame-by-frame can produce different results from one machine to another (or even on the same machine).
+
+This patch intends to fix this timing issue (clumsily). It intercepts background worker status check, turning it into a busy wait loop until all background work is done. This way, file operations should finish at the same frame they were queued, but that frame may take much more time than usual. And if background operation fails (game resource corruption, out of memory etc), the game will probably freeze.
+
+TODO: improve
