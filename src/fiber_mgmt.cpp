@@ -4,6 +4,7 @@
 #include "memory_dump.h"
 
 #include <cassert>
+#include <charconv>
 #include <limits>
 #include <stdexcept>
 
@@ -122,15 +123,17 @@ LPVOID fiber_service::create_fiber(SIZE_T stack_size, LPFIBER_START_ROUTINE func
     LPVOID fiber = m_create_fiber_func(stack_size, func, arg);
     if (fiber == NULL)
     {
-        auto error_id = ::GetLastError();
-        char message[1024] = {0};
-        auto res = ::FormatMessageA(
-            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-            NULL, error_id, 0, (LPSTR)&message, sizeof(message), NULL
-        );
-        (void)res;
-        assert(res != 0);
-        throw std::runtime_error(message);
+        const auto error_id = ::GetLastError();
+        switch (error_id)
+        {
+        case ERROR_NOT_ENOUGH_MEMORY:
+            throw std::runtime_error("CreateFiber error: out of memory");
+        default:
+            char message[256] = "CreateFiber error: ";
+            auto [ptr, ec] = std::to_chars(message + strlen(message), message + sizeof(message), error_id);
+            *ptr = 0;
+            throw std::runtime_error(message);
+        }
     }
     transfer_ownership(fiber);
     return fiber;
