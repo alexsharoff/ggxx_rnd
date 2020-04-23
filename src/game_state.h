@@ -401,9 +401,10 @@ struct match_state_2
     memory_offset<uint8_t, 0x50f7ec> p1_rounds_won;
     memory_offset<uint8_t, 0x50f7ed> p2_rounds_won;
     memory_offset<uint32_t, 0x50f7fc> round_end_bitmask;
-    memory_offset<uint32_t, 0x555D24> round_end_hitstop;
+    memory_offset<uint32_t, 0x50F7F4> round_end_flag1;
     memory_offset<uint16_t, 0x50F800> match_countdown;
-    memory_offset<uint32_t, 0x50F804> round_end_flag;
+    memory_offset<uint32_t, 0x50F804> round_end_flag2;
+    memory_offset<uint32_t, 0x555D24> round_end_hitstop;
     memory_offset<uint8_t, 0x5113C0> round_state;
     // TODO: at least 14! Double check
     memory_offset<menu_fiber[14], 0x54f030> menu_fibers;
