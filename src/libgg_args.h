@@ -9,12 +9,15 @@
 struct libgg_args
 {
     std::wstring replay_path;
+    bool replay_play = false;
     bool replay_record = false;
     bool replay_check = false;
-    bool replay_update = false;
+    bool replay_continue = false;
     // when frame <key> ends, take next frame from <value> and restore its state
     std::unordered_map<uint32_t, std::deque<uint32_t>> rollback_map;
     bool nographics = false;
+    bool nosound = false;
+    bool noinput = false;
     // TODO: GGPO bug: GGPO crashes if frames == 0 in ggpo_start_synctest
     // Assertion failed at ggpo/lib/ggpo/ring_buffer.h:39
     int synctest_frames = 0;

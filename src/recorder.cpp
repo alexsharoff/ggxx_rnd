@@ -213,7 +213,7 @@ bool update_replay_file(std::wstring& error)
 bool input_hook(IGame* game)
 {
     action action{};
-    if (::GetForegroundWindow() == game->GetWindowHandle())
+    if (::GetForegroundWindow() == game->GetWindowHandle() && !g_cfg->get_args().noinput)
     {
         for (const auto& [key, action_] : g_key_map)
         {
@@ -390,7 +390,7 @@ bool input_hook(IGame* game)
             const auto frame = game->GetState().match2.clock.get() - g_recorder.initial_frame;
             if (frame >= g_recorder.history.size())
             {
-                if (!g_cfg->get_args().replay_path.empty())
+                if (!g_cfg->get_args().replay_path.empty() && !g_cfg->get_args().replay_continue)
                     std::exit(0);
                 else
                     g_recorder.playing = false;
@@ -459,14 +459,15 @@ bool process_objects_hook(IGame* game)
         auto str = "FRAME " + std::to_string(frame);
         game->WriteCockpitFont(str.c_str(), 275, 440, 1, 0xFF, 1);
     }
-    if (g_recorder.recording)
-    {
-        game->WriteCockpitFont("REPLAY REC", 270, 100, 1, 0xFF, 1);
-    }
     if (g_recorder.playing)
     {
         game->WriteCockpitFont("REPLAY", 285, 100, 1, 0xFF, 1);
     }
+    else if (g_recorder.recording)
+    {
+        game->WriteCockpitFont("RECORDING", 270, 100, 1, 0xFF, 1);
+    }
+    else 
     if (g_frame_stop.out_of_memory)
     {
         game->WriteCockpitFont("OUT OF MEMORY!", 230, 440, 1, 0xff, 1);
@@ -493,12 +494,12 @@ void Initialize(IGame* game, configuration* cfg)
     if (!args.replay_path.empty())
     {
         std::wstring error;
-        if (!args.replay_record)
+        if (args.replay_play)
         {
             read_replay_file(args.replay_path.c_str(), error);
             g_recorder.playing = true;
         }
-        if (args.replay_record || args.replay_update)
+        if (args.replay_record)
         {
             open_replay_file(args.replay_path.c_str(), error);
             g_recorder.recording = true;

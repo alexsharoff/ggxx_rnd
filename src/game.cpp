@@ -18,6 +18,7 @@ using memory_dump::local_memory_accessor;
 namespace
 {
 IGame* g_game = nullptr;
+configuration* g_cfg = nullptr;
 gg_state g_global_data_orig;
 bool g_enable_fps_limit = true;
 size_t g_image_base = 0;
@@ -34,8 +35,9 @@ void get_raw_input_data(input_data* out)
 {
     const auto f = *g_global_data_orig.get_raw_input_data.get().get();
 
-    input_data input;
-    f(&input);
+    input_data input{};
+    if (!g_cfg->get_args().noinput)
+        f(&input);
 
     g_input[0] = input.keys[0];
     g_input[1] = input.keys[1];
@@ -596,5 +598,6 @@ private:
 std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, configuration* cfg)
 {
     assert(g_image_base == 0);
+    g_cfg = cfg;
     return std::make_shared<Game>(baseAddress, cfg);
 }

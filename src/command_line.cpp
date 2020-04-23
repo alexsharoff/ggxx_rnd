@@ -36,9 +36,11 @@ std::vector<std::wstring> get_command_line()
 const wchar_t help_message[] = 
 L"Supported arguments:\n"
 "--help: show this message\n"
-"[{--replay <path> | <path>.ggr} [--check] [--update] [--rollback <from frame> <to frame> [--rollback ...]]\n"
+"[{--replay <path> | <path>.ggr} [--checkstate] [--continue] [--rollback <from frame> <to frame> [--rollback ...]]\n"
 "[--record <path>]\n"
 "[--nographics]\n"
+"[--nosound]\n"
+"[--noinput]\n"
 "[--synctest <frame count>]\n"
 "[--displaycfg <path>]\n"
 "[--savedata <path>]\n"
@@ -212,7 +214,22 @@ libgg_args parse_command_line()
 
         auto path = parse_replay_path(args);
         if (!path.empty())
+        {
             cmd.replay_path = path;
+            cmd.replay_play = true;
+        }
+
+        path = parse_path(args, L"--replay", true);
+        if (!path.empty())
+        {
+            cmd.replay_path = path;
+            cmd.replay_play = true;
+            if (parse_option(args, L"--record"))
+            {
+                // update replay (overdub)
+                cmd.replay_record = true;
+            }
+        }
 
         path = parse_path(args, L"--record");
         if (!path.empty())
@@ -220,10 +237,6 @@ libgg_args parse_command_line()
             cmd.replay_path = path;
             cmd.replay_record = true;
         }
-
-        path = parse_path(args, L"--replay", true);
-        if (!path.empty())
-            cmd.replay_path = path;
 
         auto integers = parse_integers(args, L"--synctest", 1);
         if (!integers.empty())
@@ -238,10 +251,11 @@ libgg_args parse_command_line()
         }
 
         cmd.printstate = parse_integers(args, L"--printstate", std::numeric_limits<size_t>::max());
-
-        cmd.replay_check = parse_option(args, L"--check");
-        cmd.replay_update = parse_option(args, L"--update");
+        cmd.replay_check = parse_option(args, L"--checkstate");
+        cmd.replay_continue = parse_option(args, L"--continue");
         cmd.nographics = parse_option(args, L"--nographics");
+        cmd.nosound = parse_option(args, L"--nosound");
+        cmd.noinput = parse_option(args, L"--noinput");
         cmd.game_mode = parse_game_mode(args, L"--gamemode");
         cmd.usedefaults = parse_option(args, L"--usedefaults");
         cmd.displaycfg = parse_path(args, L"--displaycfg");

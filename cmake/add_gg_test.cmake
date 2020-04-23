@@ -17,7 +17,7 @@ function(add_gg_test NAME)
         # Game state has been extended, thus exactly the same frame
         # will produce a different state checksum.
         # Checksum values stored in replay files need to be updated.
-        set(_ARGS --update)
+        set(_ARGS --record)
     endif()
     if(LIBGG_TEST_NOGRAPHICS)
         list(APPEND _ARGS --nographics)
@@ -25,6 +25,7 @@ function(add_gg_test NAME)
     if(LIBGG_TEST_NOSOUND)
         list(APPEND _ARGS --nosound)
     endif()
+    list(APPEND _ARGS --noinput)
 
     add_test(NAME ${test_name}
         COMMAND gg --replay ${CMAKE_SOURCE_DIR}/replays/${NAME}.ggr ${_ARGS}
