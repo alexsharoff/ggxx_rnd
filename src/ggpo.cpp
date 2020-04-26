@@ -36,11 +36,9 @@ namespace
 GGPOSession* g_session = nullptr;
 GGPOPlayerHandle g_player_handles[2];
 bool g_call_ggpo_idle_manually = true;
-bool g_during_match = false;
 bool g_replaying_input = false;
 bool g_is_active = false;
 size_t g_frame_base = 0;
-bool g_waiting_for_first_match = false;
 std::unordered_map<size_t, std::shared_ptr<game_state>> g_saved_state_map;
 size_t g_vs_2p_jmp_addr = 0;
 IGame* g_game = nullptr;
@@ -49,8 +47,6 @@ libgg_args g_cmd;
 void activate()
 {
     g_is_active = true;
-    g_waiting_for_first_match = true;
-    g_saved_state_map.clear();
 }
 
 #pragma warning(push)
@@ -107,6 +103,20 @@ bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
     *len = sizeof(game_state);
     *checksum = state_checksum(*state_ptr);
 
+#ifndef NDEBUG
+    auto found = g_saved_state_map.find(frame);
+    if (found != g_saved_state_map.end())
+    {
+        int checksum_old = state_checksum(*found->second);
+        if (checksum_old != *checksum)
+        {
+            std::cout << "Synctest failed at " << state_ptr->match2.clock.get() << std::endl;
+            print_game_state(*found->second);
+            print_game_state(*state_ptr);
+            std::exit(1);
+        }
+    }
+#endif
     g_saved_state_map[frame] = state_ptr;
 
     return true;
@@ -155,9 +165,10 @@ bool on_event(GGPOEvent *info)
     return true;
 }
 
-void on_match_start()
+void start_session()
 {
-    LIBGG_LOG() << std::endl;
+    if (g_session)
+        return;
 
     // ggpo_idle() must be called instead of Sleep().
     // In Steam release Sleep() is called just before IDirect3D::Present,
@@ -173,24 +184,10 @@ void on_match_start()
 
     g_game->EnablePauseMenu(false);
 
-    g_during_match = true;
     g_call_ggpo_idle_manually = true;
     g_frame_base = g_game->GetState().match2.clock.get();
-}
 
-void on_match_end()
-{
-    LIBGG_LOG() << std::endl;
-
-    g_game->EnableFpsLimit(true);
-    g_game->EnablePauseMenu(true);
-    g_during_match = false;
-}
-
-void start_session()
-{
-    if (g_session)
-        return;
+    g_saved_state_map.clear();
 
     GGPOSessionCallbacks callbacks;
     callbacks.advance_frame = advance_frame;
@@ -217,26 +214,28 @@ void start_session()
     //ggpo_set_disconnect_notify_start(g_session, 1000);
     //ggpo_set_disconnect_timeout(g_session, 10000);
 
-    g_during_match = false;
-    g_waiting_for_first_match = true;
-
     LIBGG_LOG() << "end" << std::endl;
 }
 
 void close_session()
 {
+    g_game->EnableFpsLimit(true);
+    g_game->EnablePauseMenu(true);
+
     if (g_session)
     {
         GGPO_CHECK(ggpo_close_session(g_session));
         g_session = nullptr;
     }
 
+    g_saved_state_map.clear();
+
     LIBGG_LOG() << "end" << std::endl;
 }
 
 bool input_data_hook(IGame* game)
 {
-    if (!g_session || !g_during_match)
+    if (!g_session)
         return true;
 
     auto input = game->GetInputRemapped();
@@ -277,14 +276,12 @@ bool game_tick_end_hook(IGame* game)
     if (!g_is_active)
         return true;
 
-    if (game->InMatch())
+    if (!game->FindFiberByName("OPTION"))
     {
-        g_waiting_for_first_match = false;
-        if (!g_during_match)
+        if (!g_session)
         {
+            LIBGG_LOG() << "start_session" <<  std::endl;
             start_session();
-            LIBGG_LOG() << "on_match_start" <<  std::endl;
-            on_match_start();
         }
         else
         {
@@ -294,23 +291,12 @@ bool game_tick_end_hook(IGame* game)
     }
     else
     {
-        if (!g_replaying_input)
+        // Exited from VS 2P
+        if (g_session)
         {
-            if(g_during_match)
-            {
-                LIBGG_LOG() << "on_match_end" <<  std::endl;
-                on_match_end();
-                close_session();
-            }
-
-            // Exited from VS 2P
-            if (!g_waiting_for_first_match && game->FindFiberByName("OPTION"))
-            {
-                LIBGG_LOG() << "close_session" <<  std::endl;
-                on_match_end();
-                close_session();
-                g_is_active = false;
-            }
+            LIBGG_LOG() << "close_session" <<  std::endl;
+            close_session();
+            g_is_active = false;
         }
     }
 
@@ -319,7 +305,7 @@ bool game_tick_end_hook(IGame* game)
 
 bool sleep_hook(IGame* game)
 {
-    if (!g_session || !g_during_match)
+    if (!g_session)
         return true;
 
     LIBGG_LOG() << std::endl;

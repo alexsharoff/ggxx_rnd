@@ -291,11 +291,23 @@ struct match_state
     memory_offset<player_button_timers, 0x516010> player_button_timers;
     memory_offset<player_direction_timers, 0x5161f8> player_direction_timers;
     memory_offset<player_controller_state[2], 0x516294> player_controller_state;
-    memory_offset<uint8_t, 0x51B814> p1_selected_palette;
-    memory_offset<uint8_t, 0x51B816> p2_selected_palette;
-    // TODO: ac / gg / ggx
-    memory_offset<bool, 0x51B8F8> p1_ex_enabled;
-    memory_offset<bool, 0x51B8FC> p2_ex_enabled;
+    #pragma pack(push, 1)
+    struct data_
+    {
+        uint8_t selected_palette[2]; // 0
+        uint8_t unknown1[0x12]; // 2
+        uint16_t selected_char[2]; // 14
+        uint8_t unknown2[0xe]; // 18
+        uint16_t winner; // 26
+        uint8_t unknown3[0x6]; // 28
+        uint16_t winstreak; // 2e
+    };
+    #pragma pack(pop)
+    static_assert(sizeof(data_) == 0x30);
+    memory_offset<data_, 0x51B814> data;
+    memory_offset<uint32_t[2], 0x51B8F0> char_mode_gold;
+    memory_offset<uint32_t[2], 0x51B8F8> char_mode_ex;
+    memory_offset<uint32_t[2], 0x51B900> char_mode_sp;
     // There are actually 4 controllers, but 3-4 are copies of 2
     memory_offset<controller_state[2], 0x51EDC8> controller_state;
     memory_offset<uint8_t[0x24], 0x519E50> extra_objects_meta;
@@ -382,6 +394,21 @@ struct fiber_state
     memory_offset<float, 0x5202e4> data2;
     // FIN, NXBT
     memory_offset<uint32_t, 0x5202e8> data3;
+
+    memory_offset<uint32_t[0x1c], 0x50BF30> charselect1;
+    memory_offset<uint32_t[0x5a], 0x50ACC8> charselect2;
+    memory_offset<uint32_t[22], 0x555C40> charselect3;
+    memory_offset<uint32_t[2], 0x520DD0> charselect4;
+    memory_offset<uint32_t, 0x520E7C> charselect5;
+    memory_offset<uint32_t, 0x520E9C> charselect6;
+    memory_offset<uint32_t, 0x520EBC> charselect7;
+    memory_offset<uint32_t, 0x520EDC> charselect8;
+    memory_offset<uint32_t[2], 0x50AE38> charselect9;
+    memory_offset<uint32_t[8], 0x44E434> charselect10;
+    memory_offset<uint32_t, 0x51B9E4> charselect11;
+    memory_offset<uint32_t, 0x3EA9FC> stage_select_controller;
+    memory_offset<uint64_t[0x10a], 0x44E664> random_stage_sequence;
+    memory_offset<uint64_t[6], 0x44E454> random_char_sequence;
 };
 
 // _tiddata layout:
@@ -406,8 +433,7 @@ struct match_state_2
     memory_offset<uint32_t, 0x50F804> round_end_flag2;
     memory_offset<uint32_t, 0x555D24> round_end_hitstop;
     memory_offset<uint8_t, 0x5113C0> round_state;
-    // TODO: at least 14! Double check
-    memory_offset<menu_fiber[14], 0x54f030> menu_fibers;
+    memory_offset<menu_fiber[0x20], 0x54f030> menu_fibers;
     memory_offset<mersenne_twister, 0x565F20> rng1;
     // not sure if needed
     memory_offset<mersenne_twister, 0x564B60> rng2;
@@ -452,6 +478,9 @@ struct match_state_2
     // Used by FIN fiber (fades the screen to black
     // when SELECT is pressed in training mode)
     memory_offset<float, 0x51f22c> black_screen_opacity;
+
+    memory_offset<uint32_t, 0x3EACDC> selected_bgm;
+    memory_offset<uint32_t, 0x516048> selected_stage;
 };
 
 struct game_state

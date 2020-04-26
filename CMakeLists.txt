@@ -79,7 +79,7 @@ add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
 
 include(add_gg_test)
 
-# Enable once [!] if game state has been extended and all autotests started to fail
+# Enable once [!] after game state has been extended and all autotests started to fail
 set(LIBGG_TEST_UPDATE_STATE_CHECKSUM OFF)
 # Disable graphics and sound for autotests
 # Speeds things up greatly
@@ -88,8 +88,12 @@ set(LIBGG_TEST_NOSOUND OFF)
 # Don't run tests in parallel
 set(LIBGG_TEST_RUN_SERIAL OFF)
 
-add_gg_test(vs2p_fafnir_tyrant_rave ARGS --gamemode network --checkstate --synctest 8)
-add_gg_test(vs2p_kliff_throw ARGS --gamemode network --checkstate --synctest 1)
+add_gg_test(vs2p_fafnir_tyrant_rave ARGS --gamemode network --checkstate --synctest 8
+    DISABLED # TODO: support BFBT and related fibers
+)
+add_gg_test(vs2p_kliff_throw ARGS --gamemode network --checkstate --synctest 1
+    DISABLED # TODO: support BFBT and related fibers
+)
 add_gg_test(vs2p_faust_taunt ARGS
     --checkstate
     --rollback 1400 1050
@@ -100,4 +104,13 @@ add_gg_test(training_kliff_taunt ARGS
     --rollback 840 691
     --rollback 1289 840
     --rollback 1300 1288
+)
+add_gg_test(charselect_screen ARGS
+    --gamemode network --checkstate --synctest 1
+)
+add_gg_test(charselect_screen_random_char ARGS
+    --gamemode network --checkstate --synctest 1
+)
+add_gg_test(charselect_screen_random_stage ARGS
+    --gamemode network --checkstate --synctest 1
 )

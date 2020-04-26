@@ -82,10 +82,10 @@ struct reflect<match_state>
         &match_state::camera_state,
         &match_state::player_button_timers,
         &match_state::player_direction_timers,
-        &match_state::p1_selected_palette,
-        &match_state::p2_selected_palette,
-        &match_state::p1_ex_enabled,
-        &match_state::p2_ex_enabled,
+        &match_state::data,
+        &match_state::char_mode_gold,
+        &match_state::char_mode_ex,
+        &match_state::char_mode_sp,
         &match_state::controller_state,
         &match_state::extra_objects_meta,
         &match_state::extra_objects,
@@ -175,7 +175,9 @@ struct reflect<match_state_2>
         &match_state_2::effect_data6,
         &match_state_2::effect_data7,
         &match_state_2::tiddata_fls_index,
-        &match_state_2::black_screen_opacity
+        &match_state_2::black_screen_opacity,
+        &match_state_2::selected_bgm,
+        &match_state_2::selected_stage
     );
 };
 
@@ -202,7 +204,21 @@ struct reflect<fiber_state>
         &fiber_state::pause_state,
         &fiber_state::data1,
         &fiber_state::data2,
-        &fiber_state::data3
+        &fiber_state::data3,
+        &fiber_state::charselect1,
+        &fiber_state::charselect2,
+        &fiber_state::charselect3,
+        &fiber_state::charselect4,
+        &fiber_state::charselect5,
+        &fiber_state::charselect6,
+        &fiber_state::charselect7,
+        &fiber_state::charselect8,
+        &fiber_state::charselect9,
+        &fiber_state::charselect10,
+        &fiber_state::charselect11,
+        &fiber_state::stage_select_controller,
+        &fiber_state::random_stage_sequence,
+        &fiber_state::random_char_sequence
     );
 };
 
@@ -321,6 +337,21 @@ uint32_t state_checksum(const game_state& state)
     if (p2.has_value())
         hash ^= object_checksum(p2.value()) ^ object_checksum(p2_char_state);
 
+    for (size_t i = 0; i < 2; ++i)
+    {
+        hash ^= std::hash<uint32_t>{}(state.match.char_mode_ex.get()[i]) ^
+            std::hash<uint32_t>{}(state.match.char_mode_sp.get()[i]) ^
+            std::hash<uint32_t>{}(state.match.char_mode_gold.get()[i]);
+    }
+
+    const auto& data = state.match.data.get();
+    hash ^= std::hash<uint32_t>{}(data.selected_palette[0]) ^
+        std::hash<uint32_t>{}(data.selected_palette[1]) ^
+        std::hash<uint32_t>{}(data.selected_char[0]) ^
+        std::hash<uint32_t>{}(data.selected_char[1]) ^
+        std::hash<uint32_t>{}(data.winner) ^
+        std::hash<uint32_t>{}(data.winstreak);
+
     uint32_t next_fiber_id = static_cast<uint32_t>(state.match2.next_fiber_id.get());
     hash ^= std::hash<uint32_t>{}(next_fiber_id);
     for (const auto& f : state.match2.menu_fibers.get())
@@ -335,6 +366,13 @@ uint32_t state_checksum(const game_state& state)
         }
     }
 
+    if (!state.fibers.empty())
+    {
+        hash ^= std::hash<uint32_t>{}(state.fiber_state.stage_select_controller.get()) ^
+            std::hash<uint64_t>{}(state.fiber_state.random_stage_sequence.get()[0]) ^
+            std::hash<uint64_t>{}(state.fiber_state.random_char_sequence.get()[0]);
+    }
+
     const auto& rng1 = state.match2.rng1.get();
     const auto& rng2 = state.match2.rng2.get();
     // TODO: hash projectiles, extra_objs
@@ -344,6 +382,8 @@ uint32_t state_checksum(const game_state& state)
         hash ^
         std::hash<uint32_t>{}(state.match2.rand_seed) ^
         std::hash<uint32_t>{}(state.match2.clock.get()) ^
+        std::hash<uint32_t>{}(state.match2.selected_bgm.get()) ^
+        std::hash<uint32_t>{}(state.match2.selected_stage.get()) ^
         std::hash<uint8_t>{}(state.match2.p1_rounds_won.get()) ^
         std::hash<uint8_t>{}(state.match2.p2_rounds_won.get()) ^
         std::hash<uint32_t>{}(state.match2.round_end_bitmask.get()) ^
@@ -406,14 +446,36 @@ void print_game_state(const game_state& state)
             std::cout << "  fiber=" << f.name << ':' << f.status << std::endl;
     }
 
+    if (!state.fibers.empty())
+    {
+        std::cout << "  stage_select_controller=" << state.fiber_state.stage_select_controller.get() << std::endl
+            << "  random_stage_sequence[0]=" << state.fiber_state.random_stage_sequence.get()[0] << std::endl
+            << "  random_char_sequence[0]=" << state.fiber_state.random_char_sequence.get()[0] << std::endl;
+    }
+
     const auto& rng1 = state.match2.rng1.get();
     const auto& rng2 = state.match2.rng2.get();
+    const auto& data = state.match.data.get();
     std::cout
         << "  rand() seed=" << state.match2.rand_seed << std::endl
         << "  rng1.index=" << rng1.index << std::endl
         << "  rng1.value=" << rng1.data[rng1.index] << std::endl
         << "  rng2.index=" << rng2.index << std::endl
         << "  rng2.value=" << rng2.data[rng2.index] << std::endl
+        << "  selected_stage=" << state.match2.selected_stage.get() << std::endl
+        << "  selected_bgm=" << state.match2.selected_bgm.get() << std::endl
+        << "  char_mode_ex[0]=" << state.match.char_mode_ex.get()[0] << std::endl
+        << "  char_mode_ex[1]=" << state.match.char_mode_ex.get()[1] << std::endl
+        << "  char_mode_sp[0]=" << state.match.char_mode_sp.get()[0] << std::endl
+        << "  char_mode_sp[1]=" << state.match.char_mode_sp.get()[1] << std::endl
+        << "  char_mode_gold[0]=" << state.match.char_mode_gold.get()[0] << std::endl
+        << "  char_mode_gold[1]=" << state.match.char_mode_gold.get()[1] << std::endl
+        << "  selected_palette[0]=" << (int)data.selected_palette[0] << std::endl
+        << "  selected_palette[1]=" << (int)data.selected_palette[1] << std::endl
+        << "  selected_char[0]=" << data.selected_char[0] << std::endl
+        << "  selected_char[1]=" << data.selected_char[1] << std::endl
+        << "  winner=" << data.winner << std::endl
+        << "  winstreak=" << data.winstreak << std::endl
         << "  p1_rounds_won=" << (int)state.match2.p1_rounds_won.get() << std::endl
         << "  p2_rounds_won=" << (int)state.match2.p2_rounds_won.get() << std::endl
         << "  match_countdown=" << state.match2.match_countdown.get() << std::endl
