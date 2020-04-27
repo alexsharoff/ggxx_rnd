@@ -122,7 +122,7 @@ void game_tick()
         decltype(match_state_2::menu_fibers) fibers;
         load(g_image_base, fibers);
         const auto& fiber_data = fibers.get()[0];
-        const auto is_loading = fiber_data.name == std::string("ATLD");
+        const auto is_loading = fiber_data.name == std::string_view("ATLD");
         if (g_is_loading && !is_loading)
         {
             // Loading has ended
@@ -499,14 +499,20 @@ public:
     bool InMatch() const final
     {
         const auto& fibers = g_state.match2.menu_fibers.get();
+        if (g_state.match2.next_fiber_id != fiber_id::match)
+            return false;
         for (const auto& f : fibers)
         {
-            if (f.name == std::string("FIN ")) // TODO: find something less hacky
+            if (f.name == std::string_view("FIN "))
+                continue;
+            if (f.name == std::string_view("NXBT"))
+                continue;
+            if (f.name == std::string_view("BFBT"))
                 continue;
             if (f.status)
                 return false;
         }
-        return g_state.match2.next_fiber_id == fiber_id::match;
+        return true;
     }
 
     bool InTrainingMode() const final

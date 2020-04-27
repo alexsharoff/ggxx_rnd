@@ -395,29 +395,29 @@ uint32_t state_checksum(const game_state& state)
         std::hash<uint64_t>{}(rng2.data[rng2.index]);
 }
 
-void print_object(const active_object_state& obj)
+void print_object(const active_object_state& obj, const std::string_view& name = "object")
 {
     std::cout
-        << "  object::id=" << obj.id << std::endl
-        << "    object::facing=" << (int)obj.facing << std::endl
-        << "    object::side=" << (int)obj.side << std::endl
-        << "    object::status_bitmask=" << obj.status_bitmask << std::endl
-        << "    object::health=" << obj.health << std::endl
-        << "    object::hitbox_count=" << (int)obj.hitbox_count << std::endl
-        << "    object::pos_x=" << obj.pos_x << std::endl
-        << "    object::pos_y=" << obj.pos_y << std::endl
-        << "    object::velocity_x=" << obj.velocity_x << std::endl
-        << "    object::velocity_y=" << obj.velocity_y << std::endl;
+        << "  " << name << "::id=" << obj.id << std::endl
+        << "    " << name << "::facing=" << (int)obj.facing << std::endl
+        << "    " << name << "::side=" << (int)obj.side << std::endl
+        << "    " << name << "::status_bitmask=" << obj.status_bitmask << std::endl
+        << "    " << name << "::health=" << obj.health << std::endl
+        << "    " << name << "::hitbox_count=" << (int)obj.hitbox_count << std::endl
+        << "    " << name << "::pos_x=" << obj.pos_x << std::endl
+        << "    " << name << "::pos_y=" << obj.pos_y << std::endl
+        << "    " << name << "::velocity_x=" << obj.velocity_x << std::endl
+        << "    " << name << "::velocity_y=" << obj.velocity_y << std::endl;
 }
 
-void print_object(const gg_char_state& obj)
+void print_object(const gg_char_state& obj, const std::string_view& name = "char")
 {
     std::cout
-        << "    char::stun_accumulator=" << obj.stun_accumulator << std::endl
-        << "    char::faint_countdown=" << obj.faint_countdown << std::endl
-        << "    char::tension=" << obj.tension << std::endl
-        << "    char::guard=" << obj.guard << std::endl
-        << "    char::burst=" << obj.burst << std::endl;
+        << "    " << name << "::stun_accumulator=" << obj.stun_accumulator << std::endl
+        << "    " << name << "::faint_countdown=" << obj.faint_countdown << std::endl
+        << "    " << name << "::tension=" << obj.tension << std::endl
+        << "    " << name << "::guard=" << obj.guard << std::endl
+        << "    " << name << "::burst=" << obj.burst << std::endl;
 }
 
 // TODO: implement and use pretty_print.h here
@@ -429,14 +429,14 @@ void print_game_state(const game_state& state)
     const auto& p1 = state.match.p1_character.get().ptr;
     if (p1.has_value())
     {
-        print_object(p1.value());
-        print_object(p1_char_state);
+        print_object(p1.value(), "p1");
+        print_object(p1_char_state, "p1");
     }
     const auto& p2 = state.match.p2_character.get().ptr;
     if (p2.has_value())
     {
-        print_object(p2.value());
-        print_object(p2_char_state);
+        print_object(p2.value(), "p2");
+        print_object(p2_char_state, "p2");
     }
 
     std::cout << "  next_fiber_id=" << (uint32_t)state.match2.next_fiber_id.get() << std::endl;
