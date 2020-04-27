@@ -409,6 +409,13 @@ struct fiber_state
     memory_offset<uint32_t, 0x3EA9FC> stage_select_controller;
     memory_offset<uint64_t[0x10a], 0x44E664> random_stage_sequence;
     memory_offset<uint64_t[6], 0x44E454> random_char_sequence;
+
+    // FOUT
+    memory_offset<uint32_t, 0x511B40> fout_condition;
+
+    // XAudio file loading queue?
+    memory_offset<uint32_t[0x1a], 0x51BA2C> data4;
+    memory_offset<uint32_t[0x82], 0x520B40> data5;
 };
 
 // _tiddata layout:

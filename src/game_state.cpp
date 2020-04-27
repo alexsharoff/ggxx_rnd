@@ -218,7 +218,10 @@ struct reflect<fiber_state>
         &fiber_state::charselect11,
         &fiber_state::stage_select_controller,
         &fiber_state::random_stage_sequence,
-        &fiber_state::random_char_sequence
+        &fiber_state::random_char_sequence,
+        &fiber_state::fout_condition,
+        &fiber_state::data4,
+        &fiber_state::data5
     );
 };
 
@@ -269,10 +272,8 @@ void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_servic
     {
         for (const auto& fiber_state : state.fibers)
             service->restore(fiber_state);
-
-        if (!state.fibers.empty())
-            dump_unprotected(state.fiber_state, image_base);
     }
+    dump_unprotected(state.fiber_state, image_base);
 }
 
 void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service)
@@ -295,9 +296,8 @@ void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_
                 state.fibers.push_back(fiber_state);
             }
         }
-        if (!state.fibers.empty())
-            load(image_base, state.fiber_state);
     }
+    load(image_base, state.fiber_state);
 }
 
 // TODO: use memory_dump::for_each_member_addr here
