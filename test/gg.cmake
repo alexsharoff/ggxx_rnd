@@ -49,3 +49,9 @@ foreach(synctest_frames 1 2 3 4 5 6 7 8)
         ARGS ${args}
     )
 endforeach()
+
+add_gg_test(
+    REPLAY matches/sol_vs_ky.ggr
+    ARGS --gamemode network --checkstate --synctest 1
+    TIMEOUT 120
+)
