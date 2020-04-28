@@ -70,43 +70,11 @@ target_link_libraries(test_fiber_mgmt libgg.static)
 add_executable(gg IMPORTED)
 set_target_properties(gg PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/gg.exe)
 
+include(test/gg.cmake)
+
 add_test(NAME mini_reflection COMMAND test_mini_reflection)
 add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
 #add_test(NAME memory_dump COMMAND test_memory_dump)
 #add_test(NAME diff COMMAND test_diff)
 #add_test(NAME binary_serializer COMMAND test_binary_serializer)
 #add_test(NAME pretty_print COMMAND test_pretty_print)
-
-include(add_gg_test)
-
-# Enable once [!] after game state has been extended and all autotests started to fail
-set(LIBGG_TEST_UPDATE_STATE_CHECKSUM OFF)
-# Disable graphics and sound for autotests
-# Speeds things up greatly
-set(LIBGG_TEST_NOGRAPHICS ON)
-set(LIBGG_TEST_NOSOUND OFF)
-# Don't run tests in parallel
-set(LIBGG_TEST_RUN_SERIAL OFF)
-
-add_gg_test(vs2p_fafnir_tyrant_rave ARGS --gamemode network --checkstate --synctest 8)
-add_gg_test(vs2p_kliff_throw ARGS --gamemode network --checkstate --synctest 1)
-add_gg_test(vs2p_faust_taunt ARGS
-    --checkstate
-    --rollback 1400 1050
-    --rollback 1460 1050
-)
-add_gg_test(training_kliff_taunt ARGS
-    --checkstate
-    --rollback 840 691
-    --rollback 1289 840
-    --rollback 1300 1288
-)
-add_gg_test(charselect_screen ARGS
-    --gamemode network --checkstate --synctest 1
-)
-add_gg_test(charselect_screen_random_char ARGS
-    --gamemode network --checkstate --synctest 1
-)
-add_gg_test(charselect_screen_random_stage ARGS
-    --gamemode network --checkstate --synctest 1
-)
