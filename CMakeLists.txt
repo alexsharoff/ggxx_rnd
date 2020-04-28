@@ -88,12 +88,8 @@ set(LIBGG_TEST_NOSOUND OFF)
 # Don't run tests in parallel
 set(LIBGG_TEST_RUN_SERIAL OFF)
 
-add_gg_test(vs2p_fafnir_tyrant_rave ARGS --gamemode network --checkstate --synctest 8
-    DISABLED # TODO: support BFBT and related fibers
-)
-add_gg_test(vs2p_kliff_throw ARGS --gamemode network --checkstate --synctest 1
-    DISABLED # TODO: support BFBT and related fibers
-)
+add_gg_test(vs2p_fafnir_tyrant_rave ARGS --gamemode network --checkstate --synctest 8)
+add_gg_test(vs2p_kliff_throw ARGS --gamemode network --checkstate --synctest 1)
 add_gg_test(vs2p_faust_taunt ARGS
     --checkstate
     --rollback 1400 1050

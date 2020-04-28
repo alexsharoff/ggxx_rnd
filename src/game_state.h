@@ -314,6 +314,8 @@ struct match_state
     // TODO: optimize by capturing only objects in use
     // active_object_state[0x‭17F‬]
     memory_offset<ptr_chain<data_size<0x130 * 0x17F>, 0, 0>, 0x519E50> extra_objects;
+    memory_offset<active_object_state*, 0x516778> p1_character_ptr;
+    memory_offset<active_object_state*, 0x51A07C> p2_character_ptr;
     memory_offset<ptr_chain<active_object_state, 0, 0>, 0x516778> p1_character;
     memory_offset<ptr_chain<active_object_state, 0, 0>, 0x51A07C> p2_character;
     // active_object_state[0x80]
@@ -416,6 +418,12 @@ struct fiber_state
     // XAudio file loading queue?
     memory_offset<uint32_t[0x1a], 0x51BA2C> data4;
     memory_offset<uint32_t[0x82], 0x520B40> data5;
+
+    // VSCHA, VSVS ...
+    memory_offset<uint32_t[0x26], 0x555E6C> data6;
+
+    // VS (inside :base+4B7D0)
+    memory_offset<ptr_chain<data_size<0x10>, 0, 0>, 0x520C1C> data7;
 };
 
 // _tiddata layout:

@@ -91,6 +91,8 @@ struct reflect<match_state>
         &match_state::extra_objects,
         &match_state::p1_character,
         &match_state::p2_character,
+        &match_state::p1_character_ptr,
+        &match_state::p2_character_ptr,
         &match_state::projectiles,
         &match_state::training_mode_history,
         &match_state::training_mode_cfg_display,
@@ -221,7 +223,9 @@ struct reflect<fiber_state>
         &fiber_state::random_char_sequence,
         &fiber_state::fout_condition,
         &fiber_state::data4,
-        &fiber_state::data5
+        &fiber_state::data5,
+        &fiber_state::data6,
+        &fiber_state::data7
     );
 };
 
