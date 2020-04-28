@@ -26,15 +26,26 @@ add_gg_test(
         --rollback 1289 840
         --rollback 1300 1288
 )
-add_gg_test(
-    REPLAY bugrepro/charselect_screen.ggr
-    ARGS --gamemode network --checkstate --synctest 1
-)
-add_gg_test(
-    REPLAY bugrepro/charselect_screen_random_char.ggr
-    ARGS --gamemode network --checkstate --synctest 1
-)
-add_gg_test(
-    REPLAY bugrepro/charselect_screen_random_stage.ggr
-    ARGS --gamemode network --checkstate --synctest 1
-)
+
+foreach(synctest_frames 1 2 3 4 5 6 7 8)
+    set(args
+        --gamemode network
+        --checkstate
+        --synctest ${synctest_frames}
+    )
+    add_gg_test(
+        NAME charselect_screen_${synctest_frames}f
+        REPLAY bugrepro/charselect_screen.ggr
+        ARGS ${args}
+    )
+    add_gg_test(
+        NAME charselect_screen_random_char_${synctest_frames}f
+        REPLAY bugrepro/charselect_screen_random_char.ggr
+        ARGS ${args}
+    )
+    add_gg_test(
+        NAME charselect_screen_random_stage_${synctest_frames}f
+        REPLAY bugrepro/charselect_screen_random_stage.ggr
+        ARGS ${args}
+    )
+endforeach()
