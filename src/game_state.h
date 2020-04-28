@@ -397,7 +397,7 @@ struct fiber_state
 
     memory_offset<uint32_t[0x1c], 0x50BF30> charselect1;
     memory_offset<uint32_t[0x5a], 0x50ACC8> charselect2;
-    memory_offset<uint32_t[22], 0x555C40> charselect3;
+    memory_offset<uint32_t[0x36], 0x555C40> charselect3;
     memory_offset<uint32_t[2], 0x520DD0> charselect4;
     memory_offset<uint32_t, 0x520E7C> charselect5;
     memory_offset<uint32_t, 0x520E9C> charselect6;
