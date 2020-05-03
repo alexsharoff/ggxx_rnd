@@ -65,6 +65,7 @@ struct frame_stop_data
     uint16_t speed_control_counter = 0;
     bool out_of_memory = false;
     IGame::input_t prev_input;
+    std::optional<bool> fps_limit;
 } g_frame_stop;
 
 struct recorder_data
@@ -260,10 +261,12 @@ bool input_hook(IGame* game)
             if (!!(action & action::forward))
             {
                 game->EnableFpsLimit(false);
+                g_frame_stop.fps_limit = game->FpsLimitEnabled();
             }
-            else
+            else if (g_frame_stop.fps_limit.has_value())
             {
-                game->EnableFpsLimit(true);
+                game->EnableFpsLimit(*g_frame_stop.fps_limit);
+                g_frame_stop.fps_limit = std::nullopt;
             }
         }
 

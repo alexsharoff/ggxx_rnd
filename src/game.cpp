@@ -68,6 +68,10 @@ void process_objects()
     const auto f = *g_global_data_orig.process_objects.get().get();
     f();
 
+    // before reading game state, wait for background workers
+    // TODO: wait for sound file reader too?
+    g_global_data_orig.wait_file_readers();
+
     save_current_state(g_image_base, g_state, g_fiber_service.get());
 
     for (const auto& func : g_callbacks[IGame::Event::AfterProcessObjects])
@@ -282,6 +286,11 @@ public:
     void EnableFpsLimit(bool enable) final
     {
         g_enable_fps_limit = enable;
+    }
+
+    bool FpsLimitEnabled() const final
+    {
+        return g_enable_fps_limit;
     }
 
     void AutoIncrementRng(bool enable) const final

@@ -242,7 +242,7 @@ bool input_data_hook(IGame* game)
 
     LIBGG_LOG() << std::endl;
 
-    if (!g_replaying_input)
+    if (!g_replaying_input && !g_cmd.nographics)
     {
         game->EnableFpsLimit(true);
         game->LimitFps();

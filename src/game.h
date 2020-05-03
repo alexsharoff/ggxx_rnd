@@ -30,6 +30,7 @@ struct IGame
     virtual void EnableDrawing(bool enable) = 0;
     virtual void EnablePauseMenu(bool enable) = 0;
     virtual void EnableFpsLimit(bool enable) = 0;
+    virtual bool FpsLimitEnabled() const = 0;
     // Each frame, RNG (Mersenne Twister) index is incremented even if it was unused.
     // Game loading time (in frames) may fluctuate, this makes replaying pre-recorded input
     // non-deterministic.
