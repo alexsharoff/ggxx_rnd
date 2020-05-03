@@ -143,7 +143,10 @@ void free_buffer(void *buffer)
     LIBGG_LOG() << std::endl;
 
     auto state = (game_state*)buffer;
-    g_saved_state_map.erase(state->match2.clock.get());
+    auto frame = state->match2.clock.get() - g_frame_base;
+    auto removed = g_saved_state_map.erase(frame);
+    (void)removed;
+    assert(removed == 1);
 }
 
 bool advance_frame(int)
