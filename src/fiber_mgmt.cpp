@@ -17,25 +17,13 @@ namespace
 
 fiber_service* g_service = nullptr;
 
-size_t get_stack_size(LPVOID fiber)
+void get_stack_region(LPVOID fiber, size_t*& begin, size_t& size)
 {
-    assert(fiber != nullptr);
-    auto state = reinterpret_cast<const fiber_state::mutable_state*>(fiber);
-    size_t* end = state->esp;
-    if ((size_t)state->seh_record != std::numeric_limits<size_t>::max())
-    {
-        // If seh_record is valid, it means that SwitchToFiber
-        // was called at least once for current fiber.
-        // In this case ESP no longer points to stack bottom.
-        // 
-        // Let's use SEH record pointer instead of ESP.
-        // It's always near the bottom of the stack and
-        // it's highly inlikely that anything below it
-        // is going to be overwritten during normal fiber
-        // execution.
-        end = state->seh_record;
-    }
-    return end - state->stack_begin + 1;
+    auto data = reinterpret_cast<fiber_state::mutable_state*>(fiber);
+    MEMORY_BASIC_INFORMATION info;
+    ::VirtualQuery(data->esp, &info, sizeof(info));
+    begin = static_cast<size_t*>(info.BaseAddress);
+    size = info.RegionSize / sizeof(size_t);
 }
 
 LPVOID WINAPI create_fiber_hook(SIZE_T stack_size, LPFIBER_START_ROUTINE func, LPVOID arg)
@@ -100,22 +88,38 @@ fiber_service::~fiber_service()
 
 void fiber_service::load(LPVOID fiber, fiber_state& state) const
 {
-    memory_dump::load(fiber, state.data);
-    state.stack.clear();
     auto found = m_weak_map.find(fiber);
     assert(found != m_weak_map.end());
     state.shared = found->second.lock();
-    const auto size = state.shared->stack_size;
-    state.stack.reserve(size);
-    const auto begin = state.data.stack_begin;
-    const auto end = state.data.stack_begin + size;
+    memory_dump::load(fiber, state.data);
+    size_t stack_size = 0;
+    get_stack_region(state.shared->fiber, state.stack_begin, stack_size);
+    state.stack.clear();
+    state.stack.reserve(stack_size);
+    const auto begin = state.stack_begin;
+    const auto end = state.stack_begin + stack_size;
     std::copy(begin, end, std::back_inserter(state.stack));
 }
 
 void fiber_service::restore(const fiber_state& state) const
 {
+    size_t* cur_stack_begin = nullptr;
+    size_t cur_stack_size = 0;
+    get_stack_region(state.shared->fiber, cur_stack_begin, cur_stack_size);
+    auto cur_stack_end = cur_stack_begin + cur_stack_size;
+    if (cur_stack_begin < state.stack_begin)
+    {
+        size_t diff = state.stack_begin - cur_stack_begin;
+        std::memset(cur_stack_begin, 0, diff);
+    }
+    std::copy(state.stack.begin(), state.stack.end(), state.stack_begin);
+    auto stack_end = state.stack_begin + state.stack.size();
+    if (cur_stack_end > stack_end)
+    {
+        size_t diff = cur_stack_end - stack_end;
+        std::memset(stack_end, 0, diff);
+    }
     memory_dump::dump_unprotected(state.data, state.shared->fiber);
-    std::copy(state.stack.begin(), state.stack.end(), state.data.stack_begin);
 }
 
 LPVOID fiber_service::create_fiber(SIZE_T stack_size, LPFIBER_START_ROUTINE func, LPVOID arg)
@@ -144,7 +148,7 @@ void fiber_service::transfer_ownership(LPVOID fiber)
     auto found = m_weak_map.find(fiber);
     assert(found == m_weak_map.end());
     auto ptr = std::make_shared<const immutable_fiber_state>(
-        fiber, get_stack_size(fiber), shared_from_this()
+        fiber, shared_from_this()
     );
     m_owner_map.emplace(fiber, ptr);
     m_weak_map.emplace(fiber, ptr);
@@ -164,11 +168,10 @@ void fiber_service::destroy(LPVOID fiber)
 }
 
 immutable_fiber_state::immutable_fiber_state(
-    LPVOID fiber_, size_t stack_size_, fiber_service::ptr_t service_
-) : fiber(fiber_), stack_size(stack_size_), service(service_)
+    LPVOID fiber_, fiber_service::ptr_t service_
+) : fiber(fiber_), service(service_)
 {
     assert(fiber != nullptr);
-    assert(stack_size != 0);
     assert(service != nullptr);
 }
 

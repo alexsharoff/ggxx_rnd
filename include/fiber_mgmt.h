@@ -63,14 +63,13 @@ private:
 
 struct immutable_fiber_state
 {
-    immutable_fiber_state(LPVOID fiber, size_t stack_size, fiber_service::ptr_t service);
+    immutable_fiber_state(LPVOID fiber, fiber_service::ptr_t service);
     immutable_fiber_state(const immutable_fiber_state&) = default;
     immutable_fiber_state(immutable_fiber_state&&) = default;
     immutable_fiber_state& operator=(const immutable_fiber_state&) = default;
     immutable_fiber_state& operator=(immutable_fiber_state&&) = default;
     ~immutable_fiber_state();
     LPVOID fiber;
-    size_t stack_size;
     fiber_service::ptr_t service;
 };
 
@@ -78,15 +77,12 @@ struct fiber_state
 {
     struct mutable_state
     {
-        uint8_t pad1[0x4]; // 0
-        size_t* seh_record; // 4
-        uint8_t pad2[0x4]; // 8
-        size_t* stack_begin; // C
-        uint8_t pad3[0xC8]; // 10
+        uint8_t pad1[0xD8]; // 0
         size_t* esp; // D8
-        uint8_t pad4[0x21C]; // DC
+        uint8_t pad2[0x21C]; // DC
     } data; // 2F8
     std::vector<size_t> stack;
+    size_t* stack_begin;
     std::shared_ptr<const immutable_fiber_state> shared;
 };
 static_assert(sizeof(fiber_state::mutable_state) == 0x2f8);

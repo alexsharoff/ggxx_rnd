@@ -17,25 +17,45 @@ struct fiber_arg
     size_t counter = 0;
 };
 
-__declspec(noinline) void do_work(fiber_arg& arg)
+__declspec(noinline) void do_work(fiber_arg& arg, size_t test)
 {
+    size_t pad[0x100];
+    std::fill_n(pad, 0x100, test);
     ++arg.counter;
     ::SwitchToFiber(arg.other_fiber);
+    if (pad[0xff] != test)
+        std::exit(-4);
 }
 
 void WINAPI fiber_f(LPVOID arg_)
 {
+    const size_t size = 0x800;
+    uint32_t pad1[size] = { 0 };
     fiber_arg* arg = static_cast<fiber_arg*>(arg_);
-    arg->done = false;
+    uint32_t pad2[size] = { 0 };
     size_t n = 3;
+    arg->done = false;
     while(n--)
     {
-        do_work(*arg);
+        pad1[n] = 1;
+        do_work(*arg, rand());
+        pad2[n] = 1;
     }
+    size_t i = 0;
+    while (i < size)
+    {
+        if (pad1[i] != pad2[i])
+            std::exit(-1);
+        if (!pad1[i])
+            break;
+        ++i;
+    }
+    if (i != 3)
+        std::exit(-2);
     arg->done = true;
     ::SwitchToFiber(arg->other_fiber);
     // can't reach here under normal conditions
-    std::exit(-1);
+    std::exit(-3);
 }
 
 int test1(LPVOID main_fiber)
@@ -159,9 +179,10 @@ int test4(LPVOID main_fiber)
     }
     TEST_EQ(arg.counter, 3);
 
+    arg.done = false;
+
     // restore previous state
     service->restore(state);
-    arg.done = false;
     // continue fiber execution from previous state
     while (!arg.done)
     {
