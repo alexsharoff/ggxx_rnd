@@ -82,11 +82,13 @@ struct reflect<match_state>
         &match_state::camera_state,
         &match_state::player_button_timers,
         &match_state::player_direction_timers,
+        &match_state::player_controller_state,
         &match_state::data,
         &match_state::char_mode_gold,
         &match_state::char_mode_ex,
         &match_state::char_mode_sp,
         &match_state::controller_state,
+        &match_state::controller_state2,
         &match_state::extra_objects_meta,
         &match_state::extra_objects,
         &match_state::p1_character,
@@ -158,6 +160,7 @@ struct reflect<match_state_2>
         &match_state_2::match_countdown,
         &match_state_2::round_end_flag1,
         &match_state_2::round_end_flag2,
+        &match_state_2::round_end_flag3,
         &match_state_2::round_state,
         &match_state_2::menu_fibers,
         &match_state_2::rng1,
@@ -224,8 +227,7 @@ struct reflect<fiber_state>
         &fiber_state::fout_condition,
         &fiber_state::data4,
         &fiber_state::data5,
-        &fiber_state::data6,
-        &fiber_state::data7
+        &fiber_state::data6
     );
 };
 
@@ -242,6 +244,7 @@ void load_global_data(size_t image_base, gg_state& state)
     state.direction_bitmask_to_icon_id = reinterpret_cast<direction_bitmask_to_icon_id_func_t*>(image_base + 0x1D4370);
     state.draw_arrow = reinterpret_cast<draw_arrow_func_t*>(image_base + 0x4CBE0);
     state.player_status_ticker = reinterpret_cast<player_status_ticker_func_t*>(image_base + 0x10E190);
+    state.wait_file_readers = reinterpret_cast<wait_file_readers_func_t*>(image_base + 0x4B980);
 }
 
 void dump_global_data(size_t memory_base, const gg_state& state)
@@ -278,6 +281,17 @@ void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_servic
             service->restore(fiber_state);
     }
     dump_unprotected(state.fiber_state, image_base);
+
+    const auto region1 = state.regions.region1.get();
+    if (region1)
+    {
+        auto dest = *reinterpret_cast<uint64_t**>(image_base + 0x520C1C);
+        for (const auto r : *region1)
+        {
+            *dest = r;
+            ++dest;
+        }
+    }
 }
 
 void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service)
@@ -302,6 +316,35 @@ void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_
         }
     }
     load(image_base, state.fiber_state);
+
+    bool reuse = false;
+    if (state.regions.region1)
+    {
+        // Copy-on-write
+        const auto& region1 = *state.regions.region1.get();
+        const auto src = *reinterpret_cast<uint64_t**>(image_base + 0x520C1C);
+        reuse = true;
+        for (size_t i = 0; i < 0x64; ++i)
+        {
+            if (src[i] != region1[i])
+            {
+                reuse = false;
+                break;
+            }
+        }
+    }
+
+    if (!reuse)
+    {
+        state.regions.region1 = std::make_shared<decltype(state.regions.region1)::element_type>();
+        auto& region1 = *state.regions.region1.get();
+        auto src = *reinterpret_cast<uint64_t**>(image_base + 0x520C1C);
+        for (auto& r : region1)
+        {
+            r = *src;
+            ++src;
+        }
+    }
 }
 
 // TODO: use memory_dump::for_each_member_addr here

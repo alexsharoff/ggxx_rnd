@@ -3,6 +3,8 @@
 #include "fiber_mgmt.h"
 #include "memory_dump.h"
 
+#include <array>
+#include <memory>
 #include <utility>
 
 
@@ -310,6 +312,8 @@ struct match_state
     memory_offset<uint32_t[2], 0x51B900> char_mode_sp;
     // There are actually 4 controllers, but 3-4 are copies of 2
     memory_offset<controller_state[2], 0x51EDC8> controller_state;
+    // not sure if this is used outside of built-in netplay
+    memory_offset<::controller_state[2], 0x51E968> controller_state2;
     memory_offset<uint8_t[0x24], 0x519E50> extra_objects_meta;
     // TODO: optimize by capturing only objects in use
     // active_object_state[0x‭17F‬]
@@ -397,8 +401,8 @@ struct fiber_state
     // FIN, NXBT
     memory_offset<uint32_t, 0x5202e8> data3;
 
-    memory_offset<uint32_t[0x1c], 0x50BF30> charselect1;
-    memory_offset<uint32_t[0x5a], 0x50ACC8> charselect2;
+    memory_offset<uint32_t[0x70], 0x50BF30> charselect1;
+    memory_offset<uint32_t[0x72], 0x50ACC4> charselect2;
     memory_offset<uint32_t[0x36], 0x555C40> charselect3;
     memory_offset<uint32_t[2], 0x520DD0> charselect4;
     memory_offset<uint32_t, 0x520E7C> charselect5;
@@ -406,7 +410,7 @@ struct fiber_state
     memory_offset<uint32_t, 0x520EBC> charselect7;
     memory_offset<uint32_t, 0x520EDC> charselect8;
     memory_offset<uint32_t[2], 0x50AE38> charselect9;
-    memory_offset<uint32_t[8], 0x44E434> charselect10;
+    memory_offset<uint32_t[0x1d], 0x44E3E0> charselect10;
     memory_offset<uint32_t, 0x51B9E4> charselect11;
     memory_offset<uint32_t, 0x3EA9FC> stage_select_controller;
     memory_offset<uint64_t[0x10a], 0x44E664> random_stage_sequence;
@@ -421,9 +425,28 @@ struct fiber_state
 
     // VSCHA, VSVS ...
     memory_offset<uint32_t[0x26], 0x555E6C> data6;
+};
 
-    // VS (inside :base+4B7D0)
-    memory_offset<ptr_chain<data_size<0x10>, 0, 0>, 0x520C1C> data7;
+struct memory_regions
+{
+    // :base+41F70 allocates a memory region of 3800000 bytes (58 Mb)
+    // that is used extensively throughout process lifetime.
+    // Region address is stored at :base+54810C.
+    // It's divided into subregions of following sizes:
+    // 5A4800 500000 800000 800000 600000 190000 100000
+    // 100000 20000 20000 A000 100000 400000 800000 600000 81800
+    // 
+    // "GINI" and "VS  " fibers access the region of size 600000
+    // through a pointer at :base+0x520C1C.
+    // "VS  ": modifies region via ReadFile() in background thread
+    //         reads inside :base+4B7D0
+    // "GINI": modifies region memory directly
+    //         reads at (not important)
+    // For correct rollback, whole region should be restored (600000).
+    // It's obviously too big for that, so let's cheat for now
+    // and save only the "observed" size (i.e. non-zero memory)
+    // TODO: figure out how to rollback large memory regions in a fast and correct manner
+    std::shared_ptr<std::array<uint64_t, 0x1471E>> region1;
 };
 
 // _tiddata layout:
@@ -440,12 +463,13 @@ struct _tiddata
 struct match_state_2
 {
     memory_offset<uint32_t, 0x51B914> clock;
+    memory_offset<uint8_t, 0x50F7e8> round_end_flag1;
     memory_offset<uint8_t, 0x50f7ec> p1_rounds_won;
     memory_offset<uint8_t, 0x50f7ed> p2_rounds_won;
     memory_offset<uint32_t, 0x50f7fc> round_end_bitmask;
-    memory_offset<uint32_t, 0x50F7F4> round_end_flag1;
+    memory_offset<uint32_t, 0x50F7F4> round_end_flag2;
     memory_offset<uint16_t, 0x50F800> match_countdown;
-    memory_offset<uint32_t, 0x50F804> round_end_flag2;
+    memory_offset<uint32_t, 0x50F804> round_end_flag3;
     memory_offset<uint32_t, 0x555D24> round_end_hitstop;
     memory_offset<uint8_t, 0x5113C0> round_state;
     memory_offset<menu_fiber[0x20], 0x54f030> menu_fibers;
@@ -504,6 +528,7 @@ struct game_state
     match_state_2 match2;
     std::vector<fiber_mgmt::fiber_state> fibers;
     fiber_state fiber_state;
+    memory_regions regions;
 };
 
 typedef void (process_input_func_t)();
@@ -511,6 +536,7 @@ typedef void (process_objects_func_t)();
 typedef void (get_raw_input_data_func_t)(input_data* out);
 typedef int32_t (limit_fps_func_t)();
 typedef void (game_tick_func_t)();
+typedef void (wait_file_readers_func_t)();
 typedef void (__stdcall sleep_func_t)(uint32_t ms);
 struct IXACT3WaveBank;
 struct IXACT3Wave;
@@ -605,6 +631,7 @@ struct gg_state
     direction_bitmask_to_icon_id_func_t* direction_bitmask_to_icon_id = nullptr;
     draw_arrow_func_t* draw_arrow = nullptr;
     player_status_ticker_func_t* player_status_ticker = nullptr;
+    wait_file_readers_func_t* wait_file_readers = nullptr;
 
     struct IDirect3DDevice9;
     memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
