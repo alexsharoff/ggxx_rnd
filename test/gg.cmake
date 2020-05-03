@@ -12,6 +12,16 @@ add_gg_test(
     ARGS --gamemode network --checkstate --synctest 1
 )
 add_gg_test(
+    NAME bugrepro/clash.ggr.1f
+    REPLAY bugrepro/clash.ggr
+    ARGS --gamemode network --checkstate --synctest 1
+)
+add_gg_test(
+    NAME bugrepro/clash.ggr.8f
+    REPLAY bugrepro/clash.ggr
+    ARGS --gamemode network --checkstate --synctest 8
+)
+add_gg_test(
     REPLAY bugrepro/faust_taunt.ggr
     ARGS
         --checkstate
@@ -34,24 +44,37 @@ foreach(synctest_frames 1 2 3 4 5 6 7 8)
         --synctest ${synctest_frames}
     )
     add_gg_test(
-        NAME charselect_screen_${synctest_frames}f
+        NAME charselect_screen.ggr.${synctest_frames}f
         REPLAY bugrepro/charselect_screen.ggr
         ARGS ${args}
     )
     add_gg_test(
-        NAME charselect_screen_random_char_${synctest_frames}f
+        NAME charselect_screen_random_char.ggr.${synctest_frames}f
         REPLAY bugrepro/charselect_screen_random_char.ggr
         ARGS ${args}
     )
     add_gg_test(
-        NAME charselect_screen_random_stage_${synctest_frames}f
+        NAME charselect_screen_random_stage.ggr.${synctest_frames}f
         REPLAY bugrepro/charselect_screen_random_stage.ggr
         ARGS ${args}
     )
 endforeach()
 
 add_gg_test(
+    NAME sol_vs_ky.ggr.1f
     REPLAY matches/sol_vs_ky.ggr
     ARGS --gamemode network --checkstate --synctest 1
+    TIMEOUT 120
+)
+add_gg_test(
+    NAME sol_vs_ky.ggr.3f
+    REPLAY matches/sol_vs_ky.ggr
+    ARGS --gamemode network --checkstate --synctest 3
+    TIMEOUT 120
+)
+add_gg_test(
+    NAME sol_vs_ky.ggr.8f
+    REPLAY matches/sol_vs_ky.ggr
+    ARGS --gamemode network --checkstate --synctest 8
     TIMEOUT 120
 )

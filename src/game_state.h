@@ -316,8 +316,7 @@ struct match_state
     memory_offset<::controller_state[2], 0x51E968> controller_state2;
     memory_offset<uint8_t[0x24], 0x519E50> extra_objects_meta;
     // TODO: optimize by capturing only objects in use
-    // active_object_state[0x‭17F‬]
-    memory_offset<ptr_chain<data_size<0x130 * 0x17F>, 0, 0>, 0x519E50> extra_objects;
+    memory_offset<ptr_chain<data_size<0x130 * 0x17f>, 0, 0>, 0x519E50> extra_objects;
     memory_offset<active_object_state*, 0x516778> p1_character_ptr;
     memory_offset<active_object_state*, 0x51A07C> p2_character_ptr;
     memory_offset<ptr_chain<active_object_state, 0, 0>, 0x516778> p1_character;
@@ -383,8 +382,13 @@ struct match_state
     // If it's not stored in game state, then rollback to the first frame
     // of throws that put opponent far away (Kliff) will result in a hit
     // instead of throw.
-    // test: synctest_1f_kliff_throw.ggr
+    // test: test/replays/bugrepro/kliff_throw.ggr
     memory_offset<uint32_t, 0x51B78C> unknown23;
+
+    // When a clash happens, this address is used as a condition
+    // for some calculations involving RNG (:base+6404A)
+    // TODO: test/replays/bugrepro/clash.ggr
+    memory_offset<uint32_t, 0x51B0CC> unknown24;
 };
 
 static_assert(sizeof(player_controller_state) == 152);
@@ -495,7 +499,7 @@ struct match_state_2
 
     // some of this data is required to avoid rng desync during rollback at
     // the beginning of fafnir -> tyrant rave (flashy effect uses rng)
-    // test: synctest_8f_fafnir_tyrant_rave.ggr
+    // test: test/replays/bugrepro/fafnir_tyrant_rave.ggr
     memory_offset<float[4], 0x50F814> effect_data1;
     memory_offset<uint32_t, 0x50F824> effect_data2;
     memory_offset<uint32_t[3], 0x511224> effect_data3;
