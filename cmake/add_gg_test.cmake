@@ -73,6 +73,8 @@ function(add_gg_test)
     list(APPEND _ARGS --noinput)
 
     set(command gg ${_REPLAY} ${_ARGS})
+    string(REPLACE ";" " " command_str "${command}")
+    message(STATUS "${_NAME}: ${command_str}")
     add_test(NAME ${_NAME} COMMAND ${command})
 
     set_tests_properties(${_NAME} PROPERTIES
