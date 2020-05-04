@@ -264,6 +264,12 @@ public:
             // 0xEB = jmp
             local_memory_accessor::write(static_cast<uint8_t>(0xEB), addr);
         }
+        m_drawingEnabled = enable;
+    }
+
+    bool IsDrawingEnabled() const final
+    {
+        return m_drawingEnabled;
     }
 
     void EnablePauseMenu(bool enable) final
@@ -288,7 +294,7 @@ public:
         g_enable_fps_limit = enable;
     }
 
-    bool FpsLimitEnabled() const final
+    bool IsFpsLimitEnabled() const final
     {
         return g_enable_fps_limit;
     }
@@ -608,6 +614,7 @@ public:
 
 private:
     bool m_isReady;
+    bool m_drawingEnabled = true;
 };
 
 std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, configuration* cfg)

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <time.h>
 #include <utility>
 #include <vector>
 
@@ -59,13 +60,14 @@ struct frame_stop_data
         IGame::input_t input;
     };
     int8_t speed = 1;
-    std::vector<saved_state> state_history;
-    size_t history_idx = 0;
-    bool enabled = false;
+    std::deque<saved_state> state_history;
+    std::optional<size_t> history_idx;
     uint16_t speed_control_counter = 0;
     bool out_of_memory = false;
     IGame::input_t prev_input;
     std::optional<bool> fps_limit;
+    std::optional<bool> drawing_enabled;
+    std::optional<time_t> fast_forward_start_time;
 } g_frame_stop;
 
 struct recorder_data
@@ -229,18 +231,16 @@ bool input_hook(IGame* game)
     {
         if (!(g_prev_action & action::frame_pause) && !!(action & action::frame_pause))
         {
-            g_frame_stop.enabled = !g_frame_stop.enabled;
-            g_frame_stop.speed = g_frame_stop.enabled ? 0 : 1;
+            if (g_frame_stop.history_idx.has_value())
+                g_frame_stop.history_idx = std::nullopt;
+            else
+                g_frame_stop.history_idx = g_frame_stop.state_history.size();
+            g_frame_stop.speed = g_frame_stop.history_idx.has_value() ? 0 : 1;
             g_frame_stop.out_of_memory = false;
-            if (g_frame_stop.enabled)
-            {
-                g_frame_stop.history_idx = 0;
-                g_frame_stop.state_history.clear();
-            }
         }
 
         bool speed_control_enabled = false;
-        if (g_frame_stop.enabled)
+        if (g_frame_stop.history_idx.has_value())
         {
             const bool backward = !!(action & action::backward);
             const bool forward = !!(action & action::forward);
@@ -253,56 +253,77 @@ bool input_hook(IGame* game)
                     g_frame_stop.speed = -1;
                 else
                     g_frame_stop.speed = 0;
-                ++g_frame_stop.speed_control_counter;
+                if (g_frame_stop.speed_control_counter > 0 || !(g_prev_action & action::forward))
+                    ++g_frame_stop.speed_control_counter;
             }
         }
-        else
+        else if (!!(action & action::forward))
         {
-            if (!!(action & action::forward))
+            if (!g_frame_stop.fps_limit.has_value())
             {
+                g_frame_stop.fps_limit = game->IsFpsLimitEnabled();
                 game->EnableFpsLimit(false);
-                g_frame_stop.fps_limit = game->FpsLimitEnabled();
             }
-            else if (g_frame_stop.fps_limit.has_value())
+            if (!g_frame_stop.fast_forward_start_time.has_value())
             {
-                game->EnableFpsLimit(*g_frame_stop.fps_limit);
-                g_frame_stop.fps_limit = std::nullopt;
+                g_frame_stop.fast_forward_start_time = ::time(0);
             }
+            else if (::time(0) - *g_frame_stop.fast_forward_start_time > 2 && !g_frame_stop.drawing_enabled.has_value())
+            {
+                g_frame_stop.drawing_enabled = game->IsDrawingEnabled();
+                game->EnableDrawing(false);
+            }
+        }
+
+        if (g_frame_stop.fps_limit.has_value() && (g_frame_stop.drawing_enabled.has_value() || !(action & action::forward) || g_frame_stop.history_idx.has_value()))
+        {
+            game->EnableFpsLimit(*g_frame_stop.fps_limit);
+            g_frame_stop.fps_limit = std::nullopt;
+        }
+
+        if (!(action & action::forward))
+            g_frame_stop.fast_forward_start_time = std::nullopt;
+
+        if (g_frame_stop.drawing_enabled.has_value() && (!(action & action::forward) || g_frame_stop.history_idx.has_value()))
+        {
+            game->EnableDrawing(*g_frame_stop.drawing_enabled);
+            g_frame_stop.drawing_enabled = std::nullopt;
         }
 
         if (!speed_control_enabled)
         {
-            g_frame_stop.speed = g_frame_stop.enabled ? 0 : 1;
+            g_frame_stop.speed = g_frame_stop.history_idx.has_value() ? 0 : 1;
             g_frame_stop.speed_control_counter = 0;
         }
 
         std::optional<decltype(input)> saved_input;
-
-        if (g_frame_stop.enabled)
+        if (g_frame_stop.history_idx.has_value() && g_frame_stop.history_idx < g_frame_stop.state_history.size())
         {
-            if (g_frame_stop.history_idx < g_frame_stop.state_history.size())
-            {
-                auto& state_optional = g_frame_stop.state_history[g_frame_stop.history_idx].state;
-                if (state_optional.has_value())
-                    game->SetState(*state_optional);
-                else
-                    state_optional = game->GetState();
-                saved_input = g_frame_stop.state_history[g_frame_stop.history_idx].input;
-            }
+            auto& state_optional = g_frame_stop.state_history[*g_frame_stop.history_idx].state;
+            if (state_optional.has_value())
+                game->SetState(*state_optional);
             else
+                state_optional = game->GetState();
+            saved_input = g_frame_stop.state_history[*g_frame_stop.history_idx].input;
+        }
+        else
+        {
+            try
             {
-                try
-                {
-                    g_frame_stop.state_history.push_back({
-                        game->GetState(),
-                        input
-                    });
-                }
-                catch(const std::bad_alloc&)
-                {
-                    g_frame_stop.out_of_memory = true;
-                    g_frame_stop.enabled = false;
-                }
+                g_frame_stop.state_history.push_back({
+                    game->GetState(),
+                    input
+                });
+                size_t size_limit = 100;
+                if (g_frame_stop.history_idx.has_value())
+                    size_limit = 1500;
+                while (g_frame_stop.state_history.size() > size_limit)
+                    g_frame_stop.state_history.pop_front();
+            }
+            catch(const std::bad_alloc&)
+            {
+                g_frame_stop.out_of_memory = true;
+                g_frame_stop.history_idx = std::nullopt;
             }
         }
 
@@ -311,7 +332,7 @@ bool input_hook(IGame* game)
             for (size_t i = 0; i < 2; ++i)
             {
                 const uint16_t bitmask = reverse_bytes(input[i]);
-                if (g_frame_stop.enabled)
+                if (g_frame_stop.history_idx.has_value())
                 {
                     if (!!(action & action::erase))
                     {
@@ -331,19 +352,19 @@ bool input_hook(IGame* game)
             g_frame_stop.prev_input = input_backup;
         }
 
-        if (g_frame_stop.enabled)
+        if (g_frame_stop.history_idx.has_value())
         {
-            if (g_frame_stop.state_history[g_frame_stop.history_idx].input != input)
+            if (g_frame_stop.state_history[*g_frame_stop.history_idx].input != input)
             {
-                g_frame_stop.state_history[g_frame_stop.history_idx].input = input;
+                g_frame_stop.state_history[*g_frame_stop.history_idx].input = input;
                 // Input for current frame has changed. Invalidate saved state for next frames
-                for (size_t i = g_frame_stop.history_idx + 1; i < g_frame_stop.state_history.size(); ++i)
+                for (size_t i = *g_frame_stop.history_idx + 1; i < g_frame_stop.state_history.size(); ++i)
                     g_frame_stop.state_history[i].state = std::nullopt;
             }
             if (g_frame_stop.speed > 0)
-                ++g_frame_stop.history_idx;
-            else if (g_frame_stop.speed < 0 && g_frame_stop.history_idx > 0)
-                --g_frame_stop.history_idx;
+                ++*g_frame_stop.history_idx;
+            else if (g_frame_stop.speed < 0 && *g_frame_stop.history_idx > 0)
+                --*g_frame_stop.history_idx;
         }
     }
 
@@ -394,9 +415,15 @@ bool input_hook(IGame* game)
             if (frame >= g_recorder.history.size())
             {
                 if (!g_cfg->get_args().replay_path.empty() && !g_cfg->get_args().replay_continue)
+                {
                     std::exit(0);
+                }
                 else
+                {
                     g_recorder.playing = false;
+                    // stop at current frame to give a visual cue that replay has ended
+                    g_frame_stop.history_idx = g_frame_stop.state_history.size();
+                }
             }
             else
             {
@@ -431,7 +458,7 @@ bool input_hook(IGame* game)
     }
 
     g_prev_action = action;
-    if (g_frame_stop.enabled || g_recorder.playing)
+    if (g_frame_stop.history_idx.has_value() || g_recorder.playing)
         game->SetInputRemapped(input);
 
     return true;
@@ -440,7 +467,7 @@ bool input_hook(IGame* game)
 bool process_objects_hook(IGame* game)
 {
     match_state ms;
-    if (g_frame_stop.enabled)
+    if (g_frame_stop.history_idx.has_value())
     {
         const auto& controller_state = game->GetState().match.controller_state.get();
         if (controller_state[0].bitmask_cur)
