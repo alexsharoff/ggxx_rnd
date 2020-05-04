@@ -78,3 +78,10 @@ add_gg_test(
     ARGS --gamemode network --checkstate --synctest 8
     TIMEOUT 120
 )
+
+add_gg_test(
+    NAME slayer_vs_may.ggr.4f
+    REPLAY matches/slayer_vs_may.ggr
+    ARGS --gamemode network --checkstate --synctest 4
+    TIMEOUT 120
+)
