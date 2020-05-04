@@ -320,7 +320,7 @@ struct match_state
     memory_offset<active_object_state*, 0x516778> p1_character_ptr;
     memory_offset<active_object_state*, 0x51A07C> p2_character_ptr;
     memory_offset<ptr_chain<active_object_state, 0, 0>, 0x516778> p1_character;
-    memory_offset<ptr_chain<active_object_state, 0, 0>, 0x51A07C> p2_character;
+    memory_offset<ptr_chain<active_object_state, 0, 0x130>, 0x516778> p2_character;
     // active_object_state[0x80]
     memory_offset<ptr_chain<data_size<0x130 * 0x80>, 0, 0>, 0x51677C> projectiles;
 
