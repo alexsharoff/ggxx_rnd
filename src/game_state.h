@@ -524,6 +524,8 @@ struct match_state_2
 
     memory_offset<uint32_t, 0x3EACDC> selected_bgm;
     memory_offset<uint32_t, 0x516048> selected_stage;
+
+    memory_offset<uint32_t, 0x567584> slayer_haiku;
 };
 
 struct game_state

@@ -183,7 +183,8 @@ struct reflect<match_state_2>
         &match_state_2::tiddata_fls_index,
         &match_state_2::black_screen_opacity,
         &match_state_2::selected_bgm,
-        &match_state_2::selected_stage
+        &match_state_2::selected_stage,
+        &match_state_2::slayer_haiku
     );
 };
 
