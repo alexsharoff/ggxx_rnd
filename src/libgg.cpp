@@ -11,6 +11,7 @@
 #include "training_mode_ex.h"
 #include "skip_intro.h"
 #include "sound_fix.h"
+#include "unattended.h"
 #include "util.h"
 
 
@@ -27,6 +28,7 @@ extern "C" __declspec(dllexport) void libgg_init()
         const auto image_base = (size_t)::GetModuleHandle(nullptr);
         apply_patches(image_base);
         s_game = IGame::Initialize(image_base, s_cfg.get());
+        unattended::Initialize(s_game.get(), s_cfg.get());
         print_state::Initialize(s_game.get(), s_cfg.get());
         ggpo::Initialize(s_game.get(), s_cfg.get());
         recorder::Initialize(s_game.get(), s_cfg.get());

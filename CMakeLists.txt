@@ -50,7 +50,7 @@ add_library(libgg SHARED
     src/configuration.cpp
     src/util.cpp
     src/print_state.cpp
-    src/nowindow.cpp
+    src/unattended.cpp
 )
 target_link_libraries(libgg GGPO libgg.static Shlwapi)
 target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_ENABLE>)

@@ -38,10 +38,14 @@ const wchar_t help_message[] =
 L"Supported arguments:\n"
 "[/help]\n"
 "[<path>.ggr [/record]]\n"
-"[/nowindow]\n"
+"[/unattended]\n"
 "[/synctest <frame count>]\n"
 "[/gamemode {vs2p | training | network}]\n"
 "[/printstate <frame> [<frame> ...]]"
+"[/remoteip <ip or hostname>]\n"
+"[/remoteport 7500]\n"
+"[/localport 7500]\n"
+"[/side {1 | 2}]\n"
 ;
 
 void show_help(const wchar_t* reason = nullptr, bool is_error = false)
@@ -72,21 +76,25 @@ std::wstring validate_path(const std::wstring& relpath, bool must_exist = false)
 std::wstring parse_replay_path(std::vector<std::wstring>& args, bool must_exist = false)
 {
     std::wstring result;
-    if (!args.empty() && args[0].size() > 4)
+    for (auto it = args.begin(); it != args.end(); ++it)
     {
-        auto path = args[0];
-        std::transform(path.begin(), path.end(), path.begin(), std::towlower);
-        if (path.substr(path.size() - 4) == L".ggr")
+        if (it->size() > 4 && it->at(0) != L'/')
         {
-            result = validate_path(args[0], must_exist);
-            args.erase(args.begin());
+            auto path = *it;
+            std::transform(path.begin(), path.end(), path.begin(), std::towlower);
+            if (path.substr(path.size() - 4) == L".ggr")
+            {
+                result = validate_path(args[0], must_exist);
+                args.erase(it);
+                break;
+            }
         }
     }
     return result;
 }
 
 std::vector<std::wstring> parse_values(
-    std::vector<std::wstring>& args, const std::wstring& flag, size_t size
+    std::vector<std::wstring>& args, const std::wstring_view& flag, size_t size
 )
 {
     std::vector<std::wstring> result;
@@ -113,13 +121,13 @@ std::vector<std::wstring> parse_values(
     return result;
 }
 
-bool parse_option(std::vector<std::wstring>& args, const std::wstring& flag)
+bool parse_option(std::vector<std::wstring>& args, const std::wstring_view& flag)
 {
     return !parse_values(args, flag, 0).empty();
 }
 
 std::wstring parse_path(
-    std::vector<std::wstring>& args, const std::wstring& flag, bool must_exist = false
+    std::vector<std::wstring>& args, const std::wstring_view& flag, bool must_exist = false
 )
 {
     const auto result = parse_values(args, flag, 1);
@@ -130,7 +138,7 @@ std::wstring parse_path(
 }
 
 std::vector<int> parse_integers(
-    std::vector<std::wstring>& args, const std::wstring& flag, size_t size
+    std::vector<std::wstring>& args, const std::wstring_view& flag, size_t size
 )
 {
     assert(size > 0);
@@ -158,8 +166,23 @@ std::vector<int> parse_integers(
     return integers;
 }
 
+std::optional<uint16_t> parse_port(std::vector<std::wstring>& args, const std::wstring_view& flag)
+{
+    auto integers = parse_integers(args, flag, 1);
+    if (!integers.empty())
+    {
+        if (integers[0] == 0 || integers[0] > 65535)
+        {
+            show_message_box(L"Invalid port numer", true);
+            std::exit(1);
+        }
+        return static_cast<uint16_t>(integers[0]);
+    }
+    return std::nullopt;
+}
+
 std::optional<libgg_args::game_mode_t>
-parse_game_mode(std::vector<std::wstring>& args, const std::wstring& flag)
+parse_game_mode(std::vector<std::wstring>& args, const std::wstring_view& flag)
 {
     const auto result = parse_values(args, flag, 1);
     if (result.empty())
@@ -217,13 +240,47 @@ libgg_args parse_command_line()
             cmd.replay = { path, mode };
         }
 
+        auto port_opt = parse_port(args, L"/localport");
+        if (port_opt.has_value())
+            cmd.network.localport = *port_opt;
+
+        port_opt = parse_port(args, L"/remoteport");
+        if (port_opt.has_value())
+            cmd.network.remoteport = *port_opt;
+
         auto integers = parse_integers(args, L"/synctest", 1);
         if (!integers.empty())
+        {
             cmd.synctest_frames = integers[0];
+            if (cmd.synctest_frames < 1)
+            {
+                show_message_box(L"Invalid /synctest value", true);
+                std::exit(1);
+            }
+        }
+
+        integers = parse_integers(args, L"/side", 1);
+        if (!integers.empty())
+        {
+            cmd.network.side = static_cast<uint8_t>(integers[0]);
+            if (cmd.network.side < 1 || cmd.network.side > 2)
+            {
+                show_message_box(L"Invalid /side value", true);
+                std::exit(1);
+            }
+        }
+
+        auto values = parse_values(args, L"/remoteip", 1);
+        if (!values.empty())
+        {
+            cmd.network.remoteip.clear();
+            for (auto wc : values[1])
+                cmd.network.remoteip.push_back(static_cast<char>(wc));
+        }
 
         cmd.printstate = parse_integers(args, L"/printstate", std::numeric_limits<size_t>::max());
         cmd.game_mode = parse_game_mode(args, L"/gamemode");
-        cmd.nowindow = parse_option(args, L"/nowindow");
+        cmd.unattended = parse_option(args, L"/unattended");
 
         if (!args.empty())
         {

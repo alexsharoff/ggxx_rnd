@@ -28,3 +28,9 @@ struct skip_intro_settings
     uint8_t enabled = false;
     uint8_t menu_idx = 0;
 };
+
+struct manual_frame_advance_settings
+{
+    // TODO: disable by default
+    uint8_t enabled = true;
+};

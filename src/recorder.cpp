@@ -286,16 +286,6 @@ bool input_hook(IGame* game)
     if (!g_recorder.initial_frame.has_value())
         g_recorder.initial_frame = game->GetState().match2.frame.get();
 
-    action action{};
-    if (::GetForegroundWindow() == game->GetWindowHandle())
-    {
-        for (const auto& [key, action_] : g_key_map)
-        {
-            if (::GetAsyncKeyState(key))
-                action |= action_;
-        }
-    }
-
     auto input = game->GetInputRemapped();
 
     // Replay logic:
@@ -308,8 +298,19 @@ bool input_hook(IGame* game)
         }
     }
 
-    // Frame advance logic:
+    // Manual frame advance logic:
+    if (g_cfg->get_manual_frame_advance_settings().enabled)
     {
+        action action{};
+        if (::GetForegroundWindow() == game->GetWindowHandle())
+        {
+            for (const auto& [key, action_] : g_key_map)
+            {
+                if (::GetAsyncKeyState(key))
+                    action |= action_;
+            }
+        }
+
         if (!(g_prev_action & action::frame_advance) && !!(action & action::frame_advance))
         {
             if (g_frame_advance.history_idx.has_value())
@@ -447,6 +448,8 @@ bool input_hook(IGame* game)
             else if (g_frame_advance.speed < 0 && *g_frame_advance.history_idx > 0)
                 --*g_frame_advance.history_idx;
         }
+
+        g_prev_action = action;
     }
 
     // Replay logic:
@@ -485,7 +488,6 @@ bool input_hook(IGame* game)
         }
     }
 
-    g_prev_action = action;
     if (g_frame_advance.history_idx.has_value() || g_recorder.playing)
         game->SetInputRemapped(input);
 

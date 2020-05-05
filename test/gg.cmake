@@ -72,12 +72,36 @@ add_gg_test(
     NAME slayer_vs_may.ggr.4f
     REPLAY matches/slayer_vs_may.ggr
     ARGS /gamemode vs2p /synctest 4
-    TIMEOUT 120
+    TIMEOUT 180
 )
 
 add_gg_test(
     NAME slayer_vs_may.ggr.8f
     REPLAY matches/slayer_vs_may.ggr
     ARGS /gamemode vs2p /synctest 8
-    TIMEOUT 120
+    TIMEOUT 180
+)
+
+add_gg_test(
+    REPLAY matches/session1.ggr
+    ARGS /gamemode vs2p /synctest 5
+    TIMEOUT 300
+)
+
+add_gg_test(
+    REPLAY matches/session2.ggr
+    ARGS /gamemode vs2p /synctest 5
+    TIMEOUT 300
+)
+
+add_gg_test(
+    REPLAY matches/session3.ggr
+    ARGS /gamemode vs2p /synctest 5
+    TIMEOUT 450
+)
+
+add_gg_test(
+    REPLAY matches/session4.ggr
+    ARGS /gamemode vs2p /synctest 5
+    TIMEOUT 300
 )
