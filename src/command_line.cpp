@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <cwctype>
+#include <filesystem>
 #include <iterator>
 #include <sstream>
 #include <string>
@@ -35,19 +36,12 @@ std::vector<std::wstring> get_command_line()
 
 const wchar_t help_message[] = 
 L"Supported arguments:\n"
-"--help: show this message\n"
-"[{--replay <path> | <path>.ggr} [--checkstate] [--continue] [--rollback <from frame> <to frame> [--rollback ...]]\n"
-"[--record <path>]\n"
-"[--nographics]\n"
-"[--nosound]\n"
-"[--noinput]\n"
-"[--synctest <frame count>]\n"
-"[--displaycfg <path>]\n"
-"[--savedata <path>]\n"
-"[--libggcfg <path>]\n"
-"[--usedefaults]\n"
-"[--gamemode {vs2p | training | network}]\n"
-"[--printstate <frame> [<frame> ...]]"
+"[/help]\n"
+"[<path>.ggr [/record]]\n"
+"[/nowindow]\n"
+"[/synctest <frame count>]\n"
+"[/gamemode {vs2p | training | network}]\n"
+"[/printstate <frame> [<frame> ...]]"
 ;
 
 void show_help(const wchar_t* reason = nullptr, bool is_error = false)
@@ -62,7 +56,20 @@ void show_help(const wchar_t* reason = nullptr, bool is_error = false)
     show_message_box(message.c_str(), is_error);
 }
 
-std::wstring parse_replay_path(std::vector<std::wstring>& args)
+std::wstring validate_path(const std::wstring& relpath, bool must_exist = false)
+{
+    if (must_exist && !std::filesystem::exists(relpath))
+    {
+        std::wostringstream oss;
+        oss << L"Specified file does not exist:\n" << relpath;
+        show_message_box(oss.str().c_str(), true);
+        std::exit(1);
+    }
+
+    return std::filesystem::absolute(relpath).wstring();
+}
+
+std::wstring parse_replay_path(std::vector<std::wstring>& args, bool must_exist = false)
 {
     std::wstring result;
     if (!args.empty() && args[0].size() > 4)
@@ -71,7 +78,7 @@ std::wstring parse_replay_path(std::vector<std::wstring>& args)
         std::transform(path.begin(), path.end(), path.begin(), std::towlower);
         if (path.substr(path.size() - 4) == L".ggr")
         {
-            result = args[0];
+            result = validate_path(args[0], must_exist);
             args.erase(args.begin());
         }
     }
@@ -89,10 +96,10 @@ std::vector<std::wstring> parse_values(
     if (size == std::numeric_limits<size_t>::max())
     {
         // unbound number of args
-        // consume arguments until --flag is found
+        // consume arguments until /flag is found
         auto next_flag_it = std::find_if(flat_it + 1, args.end(), [](const std::wstring& str)
         {
-            return str.size() >= 2 && str.substr(0, 2) == L"--";
+            return str.size() >= 2 && str.substr(0, 2) == L"/";
         });
         size = std::distance(flat_it, next_flag_it) - 1;
     }
@@ -119,23 +126,7 @@ std::wstring parse_path(
     if (result.empty())
         return std::wstring();
 
-    const auto& relpath = result[1];
-
-    if (must_exist)
-    {
-        if (!::PathFileExistsW(relpath.c_str()))
-        {
-            std::wostringstream oss;
-            oss << L"Specified path does not exist:\n" << relpath;
-            show_message_box(oss.str().c_str(), true);
-            std::exit(1);
-        }
-    }
-
-    wchar_t buffer[MAX_PATH + 1];
-    ::GetFullPathNameW(relpath.c_str(), MAX_PATH + 1, buffer, NULL);
-
-    return buffer;
+    return validate_path(result[1], must_exist);
 }
 
 std::vector<int> parse_integers(
@@ -167,13 +158,12 @@ std::vector<int> parse_integers(
     return integers;
 }
 
-libgg_args::game_mode_t parse_game_mode(
-    std::vector<std::wstring>& args, const std::wstring& flag
-)
+std::optional<libgg_args::game_mode_t>
+parse_game_mode(std::vector<std::wstring>& args, const std::wstring& flag)
 {
     const auto result = parse_values(args, flag, 1);
     if (result.empty())
-        return libgg_args::game_mode_t::default;
+        return std::nullopt;
 
     const auto& str = result[1];
     if (str == L"vs2p")
@@ -206,61 +196,34 @@ libgg_args parse_command_line()
     auto args = get_command_line();
     if (!args.empty())
     {
-        if (parse_option(args, L"--help"))
+        if (parse_option(args, L"/help"))
         {
             show_help();
             std::exit(0);
         }
 
-        auto path = parse_replay_path(args);
+        bool record = parse_option(args, L"/record");
+        auto path = parse_replay_path(args, !record);
         if (!path.empty())
         {
-            cmd.replay_path = path;
-            cmd.replay_play = true;
-        }
-
-        path = parse_path(args, L"--replay", true);
-        if (!path.empty())
-        {
-            cmd.replay_path = path;
-            cmd.replay_play = true;
-            if (parse_option(args, L"--record"))
+            auto mode = libgg_args::replay_t::mode_t::play;
+            if (record)
             {
-                // update replay (overdub)
-                cmd.replay_record = true;
+                if (std::filesystem::exists(path))
+                    mode = libgg_args::replay_t::mode_t::append;
+                else
+                    mode = libgg_args::replay_t::mode_t::record;
             }
+            cmd.replay = { path, mode };
         }
 
-        path = parse_path(args, L"--record");
-        if (!path.empty())
-        {
-            cmd.replay_path = path;
-            cmd.replay_record = true;
-        }
-
-        auto integers = parse_integers(args, L"--synctest", 1);
+        auto integers = parse_integers(args, L"/synctest", 1);
         if (!integers.empty())
             cmd.synctest_frames = integers[0];
 
-        for (;;)
-        {
-            integers = parse_integers(args, L"--rollback", 2);
-            if (integers.empty())
-                break;
-            cmd.rollback_map[integers[0]].push_back(integers[1]);
-        }
-
-        cmd.printstate = parse_integers(args, L"--printstate", std::numeric_limits<size_t>::max());
-        cmd.replay_check = parse_option(args, L"--checkstate");
-        cmd.replay_continue = parse_option(args, L"--continue");
-        cmd.nographics = parse_option(args, L"--nographics");
-        cmd.nosound = parse_option(args, L"--nosound");
-        cmd.noinput = parse_option(args, L"--noinput");
-        cmd.game_mode = parse_game_mode(args, L"--gamemode");
-        cmd.usedefaults = parse_option(args, L"--usedefaults");
-        cmd.displaycfg = parse_path(args, L"--displaycfg");
-        cmd.savedata = parse_path(args, L"--savedata");
-        cmd.libggcfg = parse_path(args, L"--libggcfg");
+        cmd.printstate = parse_integers(args, L"/printstate", std::numeric_limits<size_t>::max());
+        cmd.game_mode = parse_game_mode(args, L"/gamemode");
+        cmd.nowindow = parse_option(args, L"/nowindow");
 
         if (!args.empty())
         {

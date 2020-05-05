@@ -10,8 +10,10 @@ namespace
 {
 
 configuration* g_cfg;
-bool g_skipped = false;
+skip_intro_settings g_settings;
+std::optional<uint32_t> skip_frame;
 bool g_user_control = true;
+bool g_enter_menu = false;
 
 void enter_menu_automatically(size_t image_base, bool enable = true)
 {
@@ -49,24 +51,24 @@ bool game_tick_hook(IGame* game)
         enter_menu_automatically(game->GetImageBase(), false);
     }
 
-    const auto& cfg = g_cfg->get_skip_intro_settings();
-    if (cfg.enabled)
+    if (g_settings.enabled)
     {
-        if (!g_skipped)
+        const auto frame = game->GetState().match2.frame.get();
+        if (!skip_frame.has_value() || skip_frame == frame)
         {
             const auto& next_fiber = game->GetState().match2.next_fiber_id.get();
             if (next_fiber == fiber_id::title)
             {
                 auto state = game->GetState();
-                state.match2.main_menu_idx = cfg.menu_idx;
-                if (cfg.enter_menu)
+                state.match2.main_menu_idx = g_settings.menu_idx;
+                if (g_enter_menu)
                     enter_menu_automatically(game->GetImageBase());
                 state.match2.next_fiber_id = fiber_id::main_menu;
                 game->SetState(state);
-                g_skipped = true;
+                skip_frame = frame;
             }
         }
-        else if (cfg.enabled && game->FindFiberByName("OPTION"))
+        else if (g_settings.enabled && game->FindFiberByName("OPTION"))
         {
             // TODO: set menu_idx, save skip_intro_settings o file
             //cfg.menu_idx = (uint8_t)game->GetState().match2.main_menu_idx.get();
@@ -81,6 +83,19 @@ bool game_tick_hook(IGame* game)
 void Initialize(IGame* game, configuration* cfg)
 {
     g_cfg = cfg;
+    g_settings = g_cfg->get_skip_intro_settings();
+    const auto& args = g_cfg->get_args();
+    if (args.game_mode.has_value())
+    {
+        g_enter_menu = true;
+        g_settings.enabled = true;
+        if (args.game_mode == libgg_args::game_mode_t::network)
+            g_settings.menu_idx = 3;
+        else if (args.game_mode == libgg_args::game_mode_t::training)
+            g_settings.menu_idx = 7;
+        else if (args.game_mode == libgg_args::game_mode_t::vs2p)
+            g_settings.menu_idx = 2;
+    }
     game->RegisterCallback(IGame::Event::AfterGetInput, get_input_hook);
     game->RegisterCallback(IGame::Event::BeforeGameTick, game_tick_hook);
 }

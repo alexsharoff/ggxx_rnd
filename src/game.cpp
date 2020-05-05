@@ -36,8 +36,7 @@ void get_raw_input_data(input_data* out)
     const auto f = *g_global_data_orig.get_raw_input_data.get().get();
 
     input_data input{};
-    if (!g_cfg->get_args().noinput)
-        f(&input);
+    f(&input);
 
     g_input[0] = input.keys[0];
     g_input[1] = input.keys[1];
@@ -155,8 +154,8 @@ void game_tick()
             save_current_state(g_image_base, g_state);
 
             // Reset game clock to zero, we'll be using it as frame counter
-            g_state.match2.clock = 0;
-            dump_unprotected(g_state.match2.clock, g_image_base);
+            g_state.match2.frame = 0;
+            dump_unprotected(g_state.match2.frame, g_image_base);
         }
         else
         {
@@ -231,7 +230,7 @@ uint32_t direction_bitmask_to_icon_id(uint32_t input)
 class Game : public IGame
 {
 public:
-    Game(size_t image_base, configuration* cfg) : m_isReady(false)
+    Game(size_t image_base, configuration*) : m_isReady(false)
     {
         g_image_base = image_base;
 
@@ -244,9 +243,6 @@ public:
         dump_global_data(image_base, global_data);
 
         AutoIncrementRng(false);
-
-        if (cfg->get_args().nographics)
-            EnableDrawing(false);
 
         g_game = this;
     }

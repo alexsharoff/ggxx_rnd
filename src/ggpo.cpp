@@ -9,6 +9,7 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -37,17 +38,13 @@ GGPOSession* g_session = nullptr;
 GGPOPlayerHandle g_player_handles[2];
 bool g_call_ggpo_idle_manually = true;
 bool g_replaying_input = false;
-bool g_is_active = false;
 size_t g_frame_base = 0;
 std::unordered_map<size_t, std::shared_ptr<game_state>> g_saved_state_map;
 size_t g_vs_2p_jmp_addr = 0;
 IGame* g_game = nullptr;
-libgg_args g_cmd;
+configuration* g_cfg = nullptr;
+bool g_drawing_enabled = true;
 
-void activate()
-{
-    g_is_active = true;
-}
 
 #pragma warning(push)
 // warning: flow in or out of inline asm code suppresses global optimization
@@ -62,7 +59,7 @@ void __declspec(naked) jmp_menu_network()
         push esi
         push edi
     }
-    activate();
+    //TODO: start_ggpo_session()
     __asm {
         pop edi
         pop esi
@@ -86,6 +83,9 @@ void apply_patches(size_t image_base)
     dump(ptr, image_base + 0x226448 + 3 * 4);
 }
 
+namespace ggpo_callbacks
+{
+
 bool begin_game(const char*)
 {
     LIBGG_LOG() << std::endl;
@@ -97,26 +97,27 @@ bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
     LIBGG_LOG() << std::endl;
 
     auto state_ptr = std::make_shared<game_state>(g_game->GetState());
-    assert(state_ptr->match2.clock.get() - g_frame_base == static_cast<size_t>(frame));
+    assert(state_ptr->match2.frame.get() - g_frame_base == static_cast<size_t>(frame));
 
     *buffer = (unsigned char*)state_ptr.get();
     *len = sizeof(game_state);
     *checksum = state_checksum(*state_ptr);
 
-#ifndef NDEBUG
-    auto found = g_saved_state_map.find(frame);
-    if (found != g_saved_state_map.end())
+    if (g_cfg->get_args().synctest_frames > 0)
     {
-        int checksum_old = state_checksum(*found->second);
-        if (checksum_old != *checksum)
+        auto found = g_saved_state_map.find(frame);
+        if (found != g_saved_state_map.end())
         {
-            std::cout << "Synctest failed at " << state_ptr->match2.clock.get() << std::endl;
-            print_game_state(*found->second);
-            print_game_state(*state_ptr);
-            std::exit(1);
+            int checksum_old = state_checksum(*found->second);
+            if (checksum_old != *checksum)
+            {
+                std::cout << "Synctest failed" << std::endl;
+                print_game_state(*found->second);
+                print_game_state(*state_ptr);
+                std::exit(1);
+            }
         }
     }
-#endif
     g_saved_state_map[frame] = state_ptr;
 
     return true;
@@ -143,20 +144,34 @@ void free_buffer(void *buffer)
     LIBGG_LOG() << std::endl;
 
     auto state = (game_state*)buffer;
-    auto frame = state->match2.clock.get() - g_frame_base;
-    auto removed = g_saved_state_map.erase(frame);
-    (void)removed;
-    assert(removed == 1);
+    auto frame = state->match2.frame.get() - g_frame_base;
+    if (g_cfg->get_args().synctest_frames == 0)
+    {
+        auto removed = g_saved_state_map.erase(frame);
+        (void)removed;
+        assert(removed == 1);
+    }
+    else
+    {
+        static std::queue<uint32_t> s_erase_queue;
+        s_erase_queue.push(frame);
+        while (s_erase_queue.size() > 100)
+        {
+            auto frame = s_erase_queue.front();
+            g_saved_state_map.erase(frame);
+            s_erase_queue.pop();
+        }
+    }
 }
 
 bool advance_frame(int)
 {
     LIBGG_LOG() << std::endl;
-    if (!g_cmd.nographics)
+    if (g_drawing_enabled)
         g_game->EnableDrawing(false);
     g_replaying_input = true;
     g_game->GameTick();
-    if (!g_cmd.nographics)
+    if (g_drawing_enabled)
         g_game->EnableDrawing(true);
     g_replaying_input = false;
     return true;
@@ -168,10 +183,11 @@ bool on_event(GGPOEvent *info)
     return true;
 }
 
-void start_session()
+}
+
+void start_synctest()
 {
-    if (g_session)
-        return;
+    assert(g_session == nullptr);
 
     // ggpo_idle() must be called instead of Sleep().
     // In Steam release Sleep() is called just before IDirect3D::Present,
@@ -185,22 +201,20 @@ void start_session()
     // We will call it manually after getting current input data.
     g_game->EnableFpsLimit(false);
 
-    g_game->EnablePauseMenu(false);
-
     g_call_ggpo_idle_manually = true;
-    g_frame_base = g_game->GetState().match2.clock.get();
+    g_frame_base = g_game->GetState().match2.frame.get();
 
     g_saved_state_map.clear();
 
     GGPOSessionCallbacks callbacks;
-    callbacks.advance_frame = advance_frame;
-    callbacks.begin_game = begin_game;
-    callbacks.free_buffer = free_buffer;
-    callbacks.load_game_state = load_game_state;
-    callbacks.log_game_state = log_game_state;
-    callbacks.on_event = on_event;
-    callbacks.save_game_state = save_game_state;
-    GGPO_CHECK(ggpo_start_synctest(&g_session, &callbacks, "GGXX", 2, 2, g_cmd.synctest_frames));
+    callbacks.advance_frame = ggpo_callbacks::advance_frame;
+    callbacks.begin_game = ggpo_callbacks::begin_game;
+    callbacks.free_buffer = ggpo_callbacks::free_buffer;
+    callbacks.load_game_state = ggpo_callbacks::load_game_state;
+    callbacks.log_game_state = ggpo_callbacks::log_game_state;
+    callbacks.on_event = ggpo_callbacks::on_event;
+    callbacks.save_game_state = ggpo_callbacks::save_game_state;
+    GGPO_CHECK(ggpo_start_synctest(&g_session, &callbacks, "GGXX", 2, 2, g_cfg->get_args().synctest_frames));
 
     GGPOPlayer player;
     player.player_num = 1;
@@ -222,14 +236,13 @@ void start_session()
 
 void close_session()
 {
-    g_game->EnableFpsLimit(true);
-    g_game->EnablePauseMenu(true);
+    assert(g_session);
 
-    if (g_session)
-    {
-        GGPO_CHECK(ggpo_close_session(g_session));
-        g_session = nullptr;
-    }
+    if (g_drawing_enabled)
+        g_game->EnableFpsLimit(true);
+
+    GGPO_CHECK(ggpo_close_session(g_session));
+    g_session = nullptr;
 
     g_saved_state_map.clear();
 
@@ -245,7 +258,7 @@ bool input_data_hook(IGame* game)
 
     LIBGG_LOG() << std::endl;
 
-    if (!g_replaying_input && !g_cmd.nographics)
+    if (!g_replaying_input && g_drawing_enabled)
     {
         game->EnableFpsLimit(true);
         game->LimitFps();
@@ -257,7 +270,7 @@ bool input_data_hook(IGame* game)
 
     g_call_ggpo_idle_manually = true;
 
-    const auto frame = g_game->GetState().match2.clock.get() - g_frame_base;
+    const auto frame = g_game->GetState().match2.frame.get() - g_frame_base;
     const auto found = g_saved_state_map.find(frame);
     if (found == g_saved_state_map.end())
     {
@@ -274,34 +287,19 @@ bool input_data_hook(IGame* game)
     return true;
 }
 
-bool game_tick_end_hook(IGame* game)
+bool game_tick_end_hook(IGame*)
 {
-    if (!g_is_active)
+    if (!g_session)
+    {
+        if (g_cfg->get_args().synctest_frames)
+        {
+            start_synctest();
+        }
         return true;
+    }
 
-    if (!game->FindFiberByName("OPTION"))
-    {
-        if (!g_session)
-        {
-            LIBGG_LOG() << "start_session" <<  std::endl;
-            start_session();
-        }
-        else
-        {
-            LIBGG_LOG() << "advance_frame" <<  std::endl;
-            GGPO_CHECK(ggpo_advance_frame(g_session));
-        }
-    }
-    else
-    {
-        // Exited from VS 2P
-        if (g_session)
-        {
-            LIBGG_LOG() << "close_session" <<  std::endl;
-            close_session();
-            g_is_active = false;
-        }
-    }
+    LIBGG_LOG() << "advance_frame" <<  std::endl;
+    GGPO_CHECK(ggpo_advance_frame(g_session));
 
     return true;
 }
@@ -340,8 +338,9 @@ void Initialize(IGame* game, configuration* cfg)
     game->RegisterCallback(IGame::Event::BeforeSleep, sleep_hook);
     game->RegisterCallback(IGame::Event::AfterGameTick, game_tick_end_hook);
     apply_patches(game->GetImageBase());
+    g_drawing_enabled = game->IsDrawingEnabled();
     g_game = game;
-    g_cmd = cfg->get_args();
+    g_cfg = cfg;
 }
 
 }

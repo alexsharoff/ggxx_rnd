@@ -153,7 +153,7 @@ template<>
 struct reflect<match_state_2>
 {
     constexpr static auto members = member_tuple(
-        &match_state_2::clock,
+        &match_state_2::frame,
         &match_state_2::p1_rounds_won,
         &match_state_2::p2_rounds_won,
         &match_state_2::round_end_bitmask,
@@ -361,7 +361,10 @@ uint32_t object_checksum(const active_object_state& obj)
         ^ std::hash<uint32_t>{}(obj.pos_x)
         ^ std::hash<uint32_t>{}(obj.pos_y)
         ^ std::hash<uint32_t>{}(obj.velocity_x)
-        ^ std::hash<uint32_t>{}(obj.velocity_y);
+        ^ std::hash<uint32_t>{}(obj.velocity_y)
+        ^ std::hash<uint32_t>{}(obj.active_move)
+        ^ std::hash<uint32_t>{}(obj.active_move_frame)
+        ^ std::hash<uint32_t>{}(obj.hitbox_count);
 }
 
 uint32_t object_checksum(const gg_char_state& obj)
@@ -430,7 +433,6 @@ uint32_t state_checksum(const game_state& state)
     return
         hash ^
         std::hash<uint32_t>{}(state.match2.rand_seed) ^
-        std::hash<uint32_t>{}(state.match2.clock.get()) ^
         std::hash<uint32_t>{}(state.match2.selected_bgm.get()) ^
         std::hash<uint32_t>{}(state.match2.selected_stage.get()) ^
         std::hash<uint8_t>{}(state.match2.p1_rounds_won.get()) ^
@@ -456,7 +458,10 @@ void print_object(const active_object_state& obj, const std::string_view& name =
         << "    " << name << "::pos_x=" << obj.pos_x << std::endl
         << "    " << name << "::pos_y=" << obj.pos_y << std::endl
         << "    " << name << "::velocity_x=" << obj.velocity_x << std::endl
-        << "    " << name << "::velocity_y=" << obj.velocity_y << std::endl;
+        << "    " << name << "::velocity_y=" << obj.velocity_y << std::endl
+        << "    " << name << "::active_move=" << obj.active_move << std::endl
+        << "    " << name << "::active_move_frame=" << obj.active_move_frame << std::endl
+        << "    " << name << "::hitbox_count=" << obj.hitbox_count << std::endl;
 }
 
 void print_object(const gg_char_state& obj, const std::string_view& name = "char")
@@ -472,7 +477,7 @@ void print_object(const gg_char_state& obj, const std::string_view& name = "char
 // TODO: implement and use pretty_print.h here
 void print_game_state(const game_state& state)
 {
-    std::cout << "frame=" << state.match2.clock.get() << std::endl;
+    std::cout << "frame=" << state.match2.frame.get() << std::endl;
     auto& p1_char_state = state.match.character_state.get()[0];
     auto& p2_char_state = state.match.character_state.get()[1];
     const auto& p1 = state.match.p1_character.get().ptr;

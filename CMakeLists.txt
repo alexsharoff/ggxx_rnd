@@ -49,8 +49,8 @@ add_library(libgg SHARED
     src/command_line.cpp
     src/configuration.cpp
     src/util.cpp
-    src/rollback_test.cpp
     src/print_state.cpp
+    src/nowindow.cpp
 )
 target_link_libraries(libgg GGPO libgg.static Shlwapi)
 target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_ENABLE>)

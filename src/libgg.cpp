@@ -8,7 +8,6 @@
 #include "ggpo.h"
 #include "print_state.h"
 #include "recorder.h"
-#include "rollback_test.h"
 #include "training_mode_ex.h"
 #include "skip_intro.h"
 #include "sound_fix.h"
@@ -29,7 +28,6 @@ extern "C" __declspec(dllexport) void libgg_init()
         apply_patches(image_base);
         s_game = IGame::Initialize(image_base, s_cfg.get());
         print_state::Initialize(s_game.get(), s_cfg.get());
-        rollback_test::Initialize(s_game.get(), s_cfg.get());
         ggpo::Initialize(s_game.get(), s_cfg.get());
         recorder::Initialize(s_game.get(), s_cfg.get());
         training_mode_ex::Initialize(s_game.get(), s_cfg.get());

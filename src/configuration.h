@@ -8,6 +8,7 @@ class configuration
 {
 public:
     configuration();
+    ~configuration();
 
     const libgg_args& get_args() const;
     const skip_intro_settings& get_skip_intro_settings() const;
@@ -20,6 +21,6 @@ private:
     struct libgg_settings
     {
         skip_intro_settings skip_intro;
-        keyboard_mapping recorder;
+        keyboard_mapping keymap;
     } m_settings;
 };

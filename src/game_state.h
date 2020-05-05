@@ -387,7 +387,7 @@ struct match_state
 
     // When a clash happens, this address is used as a condition
     // for some calculations involving RNG (:base+6404A)
-    // TODO: test/replays/bugrepro/clash.ggr
+    // test: test/replays/bugrepro/clash.ggr
     memory_offset<uint32_t, 0x51B0CC> unknown24;
 };
 
@@ -466,7 +466,7 @@ struct _tiddata
 // cl.exe cannot handle so much templates and stops with an out of memory error.
 struct match_state_2
 {
-    memory_offset<uint32_t, 0x51B914> clock;
+    memory_offset<uint32_t, 0x51B914> frame;
     memory_offset<uint8_t, 0x50F7e8> round_end_flag1;
     memory_offset<uint8_t, 0x50f7ec> p1_rounds_won;
     memory_offset<uint8_t, 0x50f7ed> p2_rounds_won;
