@@ -97,11 +97,5 @@ add_gg_test(
 add_gg_test(
     REPLAY matches/session3.ggr
     ARGS /gamemode vs2p /synctest 5
-    TIMEOUT 450
-)
-
-add_gg_test(
-    REPLAY matches/session4.ggr
-    ARGS /gamemode vs2p /synctest 5
     TIMEOUT 300
 )
