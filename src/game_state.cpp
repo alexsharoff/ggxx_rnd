@@ -184,7 +184,8 @@ struct reflect<match_state_2>
         &match_state_2::black_screen_opacity,
         &match_state_2::selected_bgm,
         &match_state_2::selected_stage,
-        &match_state_2::slayer_haiku
+        &match_state_2::slayer_haiku,
+        &match_state_2::round_end_rng_related1
     );
 };
 
@@ -363,8 +364,7 @@ uint32_t object_checksum(const active_object_state& obj)
         ^ std::hash<uint32_t>{}(obj.velocity_x)
         ^ std::hash<uint32_t>{}(obj.velocity_y)
         ^ std::hash<uint32_t>{}(obj.active_move)
-        ^ std::hash<uint32_t>{}(obj.active_move_frame)
-        ^ std::hash<uint32_t>{}(obj.hitbox_count);
+        ^ std::hash<uint32_t>{}(obj.active_move_frame);
 }
 
 uint32_t object_checksum(const gg_char_state& obj)
@@ -460,8 +460,7 @@ void print_object(const active_object_state& obj, const std::string_view& name =
         << "    " << name << "::velocity_x=" << obj.velocity_x << std::endl
         << "    " << name << "::velocity_y=" << obj.velocity_y << std::endl
         << "    " << name << "::active_move=" << obj.active_move << std::endl
-        << "    " << name << "::active_move_frame=" << obj.active_move_frame << std::endl
-        << "    " << name << "::hitbox_count=" << obj.hitbox_count << std::endl;
+        << "    " << name << "::active_move_frame=" << obj.active_move_frame << std::endl;
 }
 
 void print_object(const gg_char_state& obj, const std::string_view& name = "char")
