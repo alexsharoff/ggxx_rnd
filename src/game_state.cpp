@@ -185,7 +185,7 @@ struct reflect<match_state_2>
         &match_state_2::selected_bgm,
         &match_state_2::selected_stage,
         &match_state_2::slayer_haiku,
-        &match_state_2::round_end_rng_related1
+        &match_state_2::dustcombo_rng_related
     );
 };
 

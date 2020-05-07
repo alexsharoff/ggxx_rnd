@@ -527,9 +527,13 @@ struct match_state_2
 
     memory_offset<uint32_t, 0x567584> slayer_haiku;
 
-    // test: test/replays/matches/session3.ggr
+    // test/replays/matches/session1.ggr
+    // test/replays/matches/session2.ggr
+    // test/replays/matches/session3.ggr
     // at :base+7E600
-    memory_offset<uint64_t[0x200], 0x512310> round_end_rng_related1;
+    // at :base+7E52A
+    // at :base+7DF01
+    memory_offset<uint64_t[0x20A], 0x512310> dustcombo_rng_related;
 };
 
 struct game_state
