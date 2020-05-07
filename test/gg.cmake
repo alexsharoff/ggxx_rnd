@@ -82,20 +82,25 @@ add_gg_test(
     TIMEOUT 180
 )
 
-add_gg_test(
-    REPLAY matches/session1.ggr
-    ARGS /gamemode vs2p /synctest 5
-    TIMEOUT 300
-)
+foreach(synctest_frames 1 2 3 4 5 6 7 8)
+    add_gg_test(
+        NAME session1.ggr.${synctest_frames}f
+        REPLAY matches/session1.ggr
+        ARGS /gamemode vs2p /synctest ${synctest_frames}
+        TIMEOUT 300
+    )
 
-add_gg_test(
-    REPLAY matches/session2.ggr
-    ARGS /gamemode vs2p /synctest 5
-    TIMEOUT 300
-)
+    add_gg_test(
+        NAME session2.ggr.${synctest_frames}f
+        REPLAY matches/session2.ggr
+        ARGS /gamemode vs2p /synctest ${synctest_frames}
+        TIMEOUT 300
+    )
 
-add_gg_test(
-    REPLAY matches/session3.ggr
-    ARGS /gamemode vs2p /synctest 5
-    TIMEOUT 300
-)
+    add_gg_test(
+        NAME session3.ggr.${synctest_frames}f
+        REPLAY matches/session3.ggr
+        ARGS /gamemode vs2p /synctest ${synctest_frames}
+        TIMEOUT 300
+    )
+endforeach()

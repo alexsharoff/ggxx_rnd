@@ -527,9 +527,9 @@ struct match_state_2
 
     memory_offset<uint32_t, 0x567584> slayer_haiku;
 
-    // test/replays/matches/session1.ggr
-    // test/replays/matches/session2.ggr
-    // test/replays/matches/session3.ggr
+    // test/replays/matches/session1.ggr (synctest 1f)
+    // test/replays/matches/session2.ggr (synctest 1f)
+    // test/replays/matches/session3.ggr (synctest 1f)
     // at :base+7E600
     // at :base+7E52A
     // at :base+7DF01
