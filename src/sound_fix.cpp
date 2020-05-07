@@ -15,6 +15,8 @@ namespace sound_fix
 namespace
 {
 
+configuration* g_cfg;
+
 struct pair_hash
 {
     template<class T1, class T2>
@@ -28,6 +30,9 @@ std::unordered_map<size_t, sound_set_t> g_heard_sounds;
 
 bool play_sound_hook(IGame* game)
 {
+    if (g_cfg->get_args().unattended)
+        return false;
+
     const auto frame = game->GetState().match2.frame.get();
     const auto& sound_id = game->GetCurrentSound();
     auto [_, success] = g_heard_sounds[frame].insert(sound_id);
@@ -39,8 +44,9 @@ bool play_sound_hook(IGame* game)
 
 }
 
-void Initialize(IGame* game, configuration*)
+void Initialize(IGame* game, configuration* cfg)
 {
+    g_cfg = cfg;
     game->RegisterCallback(IGame::Event::BeforePlaySound, play_sound_hook);
 }
 
