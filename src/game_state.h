@@ -247,10 +247,8 @@ struct active_object_state
     uint8_t unknown9[0x14]; // 70
     uint8_t hitbox_count; // 84
     uint8_t unknown99[3]; // 85
-    ptr_chain<data_size<0x5c>, 0, 0> data_5c1; // 88
-    //data_5c* data_5c1; // 88
-    ptr_chain<data_size<0x5c>, 0, 0> data_5c2; // 8C
-    //data_5c* data_5c2; // 8C
+    data_size<0x5c>* data_5c1_ptr; // 88
+    data_size<0x5c>* data_5c2_ptr; // 8C
     void* hit_block_callback; // 90
     palette_reset_func_t* reset_palette_callback; // 94
     uint8_t unknown10[0x14]; // 98
@@ -270,6 +268,9 @@ struct active_object_state
     uint8_t unknown16; // fc
     uint8_t hitstop_countdown; // fd
     uint8_t unknown17[0x32]; // fe - 130
+
+    ptr_chain<data_size<0x5c>, 0x88, 0> data_5c1;
+    ptr_chain<data_size<0x5c>, 0x8c, 0> data_5c2;
 };
 #pragma pack(pop)
 
@@ -316,13 +317,14 @@ struct match_state
     memory_offset<::controller_state[2], 0x51E968> controller_state2;
     memory_offset<uint8_t[0x24], 0x519E50> extra_objects_meta;
     // TODO: optimize by capturing only objects in use
-    memory_offset<ptr_chain<data_size<0x130 * 0x17f>, 0, 0>, 0x519E50> extra_objects;
+    memory_offset<ptr_chain<std::array<active_object_state, 0x17f>, 0, 0>, 0x519E50> extra_objects;
     memory_offset<active_object_state*, 0x516778> p1_character_ptr;
     memory_offset<active_object_state*, 0x51A07C> p2_character_ptr;
     memory_offset<ptr_chain<active_object_state, 0, 0>, 0x516778> p1_character;
     memory_offset<ptr_chain<active_object_state, 0, 0x130>, 0x516778> p2_character;
-    // active_object_state[0x80]
-    memory_offset<ptr_chain<data_size<0x130 * 0x80>, 0, 0>, 0x51677C> projectiles;
+
+    // test/replays/matches/session2.ggr (synctest 2f)
+    memory_offset<ptr_chain<std::array<active_object_state, 0x80>, 0, 0>, 0x51677C> projectiles;
 
     memory_offset<uint8_t[0x120], 0x4FDC00> training_mode_history;
     memory_offset<uint8_t, 0x4FDD20> training_mode_cfg_display;
@@ -331,7 +333,9 @@ struct match_state
 
     memory_offset<uint32_t, 0x555FEC> pause_state;
 
-    memory_offset<uint8_t[0x90], 0x50AA0C> extra_rng_state;
+    memory_offset<uint8_t[0x90], 0x50AA0C> extra_rng_state1;
+    // test/replays/matches/session3.ggr (synctest 2f)
+    memory_offset<ptr_chain<data_size<0x60>, 0, 0>, 0x50AAE4> extra_rng_state2;
 
     // TODO: try to shorten / remove some of this stuff
     memory_offset<uint8_t, 0x505A7D> graphics1;
@@ -533,7 +537,15 @@ struct match_state_2
     // at :base+7E600
     // at :base+7E52A
     // at :base+7DF01
-    memory_offset<uint64_t[0x20A], 0x512310> dustcombo_rng_related;
+    memory_offset<uint64_t[0x20B], 0x512310> dustcombo_rng_related1;
+    // test/replays/matches/session1.ggr (synctest 8f)
+    memory_offset<uint32_t, 0x56CFE4> dustcombo_rng_related2;
+    // test/replays/matches/session1.ggr (synctest 1f)
+    memory_offset<uint32_t, 0x511220> overdrive_or_round_end_related1;
+    // at :base+EE882
+    memory_offset<uint64_t[0x3f], 0x50F828> overdrive_or_round_end_related2;
+    // at :base+EE899
+    memory_offset<uint64_t[0x30], 0x511234> overdrive_or_round_end_related3;
 };
 
 struct game_state

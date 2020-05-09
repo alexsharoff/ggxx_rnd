@@ -50,8 +50,8 @@ struct reflect<active_object_state>
         &active_object_state::unknown9,
         &active_object_state::hitbox_count,
         &active_object_state::unknown99,
-        &active_object_state::data_5c1,
-        &active_object_state::data_5c2,
+        &active_object_state::data_5c1_ptr,
+        &active_object_state::data_5c2_ptr,
         &active_object_state::hit_block_callback,
         &active_object_state::reset_palette_callback,
         &active_object_state::unknown10,
@@ -70,7 +70,9 @@ struct reflect<active_object_state>
         &active_object_state::unknown15,
         &active_object_state::unknown16,
         &active_object_state::hitstop_countdown,
-        &active_object_state::unknown17
+        &active_object_state::unknown17,
+        &active_object_state::data_5c1,
+        &active_object_state::data_5c2
     );
 };
 
@@ -100,7 +102,8 @@ struct reflect<match_state>
         &match_state::training_mode_cfg_display,
         &match_state::training_mode_data,
         &match_state::pause_state,
-        &match_state::extra_rng_state,
+        &match_state::extra_rng_state1,
+        &match_state::extra_rng_state2,
 
         &match_state::graphics1,
         &match_state::graphics2,
@@ -185,7 +188,11 @@ struct reflect<match_state_2>
         &match_state_2::selected_bgm,
         &match_state_2::selected_stage,
         &match_state_2::slayer_haiku,
-        &match_state_2::dustcombo_rng_related
+        &match_state_2::dustcombo_rng_related1,
+        &match_state_2::dustcombo_rng_related2,
+        &match_state_2::overdrive_or_round_end_related1,
+        &match_state_2::overdrive_or_round_end_related2,
+        &match_state_2::overdrive_or_round_end_related3
     );
 };
 
