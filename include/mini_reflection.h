@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string_view>
 #include <type_traits>
 #include <tuple>
@@ -133,6 +134,12 @@ struct array{};
 
 template<class T, size_t N>
 struct reflect<T[N]>
+{
+    constexpr static auto members = std::tuple<array<remove_cvref_t<T>, N>>{};
+};
+
+template<class T, size_t N>
+struct reflect<std::array<T, N>>
 {
     constexpr static auto members = std::tuple<array<remove_cvref_t<T>, N>>{};
 };

@@ -18,7 +18,6 @@ namespace memory_dump
 using offset_t = std::ptrdiff_t;
 
 // TODO: rename rel_mem_ptr => offset_ptr
-// TODO: remove abs_mem_ptr, use memory_offset<T*, size_t...>
 // memory_offset<T> with >1 Offsets holds std::optional<T>
 
 namespace
@@ -306,11 +305,11 @@ struct dumper
     template<class T, size_t Offset>
     void operator()(const ptr_chain<T, Offset>& o,
                     const self<ptr_chain<T, Offset>>&,
-                    size_t /* addr_o */, size_t& addr_m) const
+                    size_t addr_o, size_t& /* addr_m */) const
     {
         if (o.ptr)
         {
-            size_t addr_m_o = addr_m + Offset;
+            size_t addr_m_o = addr_o + Offset;
             for_each_member_addr(o.ptr.value(), *this, addr_m_o);
         }
     }
@@ -318,20 +317,28 @@ struct dumper
     template<class T, size_t Offset, size_t... Args>
     void operator()(const ptr_chain<T, Offset, Args...>& o,
                     const self<ptr_chain<T, Offset, Args...>>&,
-                    size_t /* addr_o */, size_t& addr_m) const
+                    size_t addr_o, size_t& /* addr_m */) const
     {
         if (o.ptr)
         {
             size_t ptr;
-            m_accessor.read(addr_m + Offset, ptr);
+            m_accessor.read(addr_o + Offset, ptr);
             if (ptr)
                 (*this)(static_cast<const ptr_chain<T, Args...>&>(o), self<ptr_chain<T, Args...>>{}, ptr, ptr);
         }
-        addr_m += sizeof(T*);
     }
 
     template<class T, size_t N>
     void operator()(const T (&arr)[N], const array<T, N>&, size_t /* addr_o */, size_t& addr_m) const
+    {
+        for (size_t i = 0; i < N; ++i)
+        {
+            for_each_member_addr(arr[i], *this, addr_m);
+        }
+    }
+
+    template<class T, size_t N>
+    void operator()(const std::array<T, N>& arr, const array<T, N>&, size_t /* addr_o */, size_t& addr_m) const
     {
         for (size_t i = 0; i < N; ++i)
         {
@@ -348,6 +355,13 @@ struct dumper
 
     template<class T, class BaseT, class T2, offset_t Offset>
     void operator()(const T& o, const member_descr<BaseT, memory_offset<T2, Offset>>& m,
+                    size_t addr_o, size_t&) const
+    {
+        for_each_member_addr(o.*m.member, *this, addr_o);
+    }
+
+    template<class T, class BaseT, class T2, size_t... Args>
+    void operator()(const T& o, const member_descr<BaseT, ptr_chain<T2, Args...>>& m,
                     size_t addr_o, size_t&) const
     {
         for_each_member_addr(o.*m.member, *this, addr_o);
@@ -382,9 +396,9 @@ struct loader
     template<class T, size_t Offset>
     void operator()(ptr_chain<T, Offset>& o,
                     const self<ptr_chain<T, Offset>>&,
-                    size_t /* addr_o */, size_t& addr_m) const
+                    size_t addr_o, size_t& /* addr_m */) const
     {
-        size_t addr_m_o = addr_m + Offset;
+        size_t addr_m_o = addr_o + Offset;
         T value;
         for_each_member_addr(value, *this, addr_m_o);
         o.ptr = value;
@@ -393,16 +407,15 @@ struct loader
     template<class T, size_t Offset, size_t... Args>
     void operator()(ptr_chain<T, Offset, Args...>& o,
                     const self<ptr_chain<T, Offset, Args...>>&,
-                    size_t addr_o, size_t& addr_m) const
+                    size_t addr_o, size_t& /* addr_m */) const
     {
         size_t ptr;
-        size_t addr_m_o = addr_m + Offset;
+        size_t addr_m_o = addr_o + Offset;
         (*this)(ptr, self<decltype(ptr)>{}, addr_o, addr_m_o);
         if (ptr)
             (*this)(static_cast<ptr_chain<T, Args...>&>(o), self<ptr_chain<T, Args...>>{}, ptr, ptr);
         else
             o.ptr.reset();
-        addr_m += sizeof(ptr);
     }
 
     template<class T, offset_t RelOffset>
@@ -428,6 +441,15 @@ struct loader
         }
     }
 
+    template<class T, size_t N>
+    void operator()(std::array<T, N>& arr, const array<T, N>&, size_t /* addr_o */, size_t& addr_m) const
+    {
+        for (size_t i = 0; i < N; ++i)
+        {
+            for_each_member_addr(arr[i], *this, addr_m);
+        }
+    }
+
     template<class T, class BaseT, class MemberT>
     void operator()(T& o, const member_descr<BaseT, MemberT>& m,
                     size_t /* addr_o */, size_t& addr_m) const
@@ -437,6 +459,13 @@ struct loader
 
     template<class T, class BaseT, class T2, offset_t Offset>
     void operator()(T& o, const member_descr<BaseT, memory_offset<T2, Offset>>& m,
+                    size_t addr_o, size_t& /* addr_m */) const
+    {
+        for_each_member_addr(o.*m.member, *this, addr_o);
+    }
+
+    template<class T, class BaseT, class T2, size_t... Args>
+    void operator()(T& o, const member_descr<BaseT, ptr_chain<T2, Args...>>& m,
                     size_t addr_o, size_t& /* addr_m */) const
     {
         for_each_member_addr(o.*m.member, *this, addr_o);
