@@ -49,6 +49,7 @@ bool g_network_enabled = false;
 bool g_disconnected = false;
 std::string g_status_msg = "";
 std::optional<uint32_t> g_restore_frame;
+uint32_t g_timesync_frames = 0;
 
 
 #pragma warning(push)
@@ -207,9 +208,8 @@ bool on_event(GGPOEvent *info)
         g_status_msg = "DISCONNECTED";
         break;
     case GGPO_EVENTCODE_TIMESYNC:
-        g_status_msg = "TIMESYNC";
-        // TODO: implement proper
-        Sleep(1000 * info->u.timesync.frames_ahead / 60);
+        g_timesync_frames = info->u.timesync.frames_ahead;
+        g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
         break;
     }
     return true;
@@ -328,6 +328,7 @@ void close_session()
     g_network_enabled = false;
     g_disconnected = false;
     g_status_msg = "";
+    g_timesync_frames = 0;
 }
 
 bool input_data_hook(IGame* game)
@@ -415,16 +416,29 @@ bool game_tick_end_hook(IGame*)
         return true;
     }
 
-    if (g_disconnected && !g_ggpo_frame_advance)
-    {
-        close_session();
-        return true;
-    }
-
     if (!g_restore_frame.has_value() || !g_network_enabled || g_ggpo_frame_advance)
     {
         LIBGG_LOG() << "advance_frame" <<  std::endl;
         GGPO_CHECK(ggpo_advance_frame(g_session));
+    }
+
+    if (!g_ggpo_frame_advance)
+    {
+        if (g_disconnected)
+        {
+            close_session();
+            return true;
+        }
+
+        if (g_timesync_frames > 0 && (g_game->GetState().match2.frame.get() % 6 == 0))
+        {
+            ::Sleep(16);
+            --g_timesync_frames;
+            if (g_timesync_frames > 0)
+                g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
+            else
+                g_status_msg.clear();
+        }
     }
 
     return true;
