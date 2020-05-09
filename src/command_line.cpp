@@ -84,7 +84,7 @@ std::wstring parse_replay_path(std::vector<std::wstring>& args, bool must_exist 
             std::transform(path.begin(), path.end(), path.begin(), std::towlower);
             if (path.substr(path.size() - 4) == L".ggr")
             {
-                result = validate_path(args[0], must_exist);
+                result = validate_path(*it, must_exist);
                 args.erase(it);
                 break;
             }

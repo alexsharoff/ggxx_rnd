@@ -37,7 +37,6 @@ namespace
 
 GGPOSession* g_session = nullptr;
 GGPOPlayerHandle g_player_handles[2];
-bool g_call_ggpo_idle_manually = true;
 bool g_ggpo_frame_advance = false;
 size_t g_frame_base = 0;
 std::unordered_map<size_t, std::shared_ptr<game_state>> g_saved_state_map;
@@ -47,6 +46,7 @@ configuration* g_cfg = nullptr;
 bool g_drawing_enabled = true;
 bool g_manual_frame_advance_enabled_backup = false;
 bool g_network_enabled = false;
+bool g_disconnected = false;
 std::string g_status_msg = "";
 std::optional<uint32_t> g_restore_frame;
 
@@ -131,6 +131,7 @@ bool load_game_state(unsigned char *buffer, int /* len */)
     auto state_ptr = (game_state*)(buffer);
     LIBGG_LOG() << state_ptr->match2.frame.get() << std::endl;
     g_game->SetState(*state_ptr);
+    g_restore_frame.reset();
     return true;
 }
 
@@ -230,7 +231,6 @@ void prepare()
     // We will call it manually after getting current input data.
     g_game->EnableFpsLimit(false);
 
-    g_call_ggpo_idle_manually = true;
     g_frame_base = g_game->GetState().match2.frame.get();
 
     g_saved_state_map.clear();
@@ -326,6 +326,7 @@ void close_session()
 
     g_saved_state_map.clear();
     g_network_enabled = false;
+    g_disconnected = false;
     g_status_msg = "";
 }
 
@@ -351,10 +352,7 @@ bool input_data_hook(IGame* game)
         game->EnableFpsLimit(false);
     }
 
-    if (g_call_ggpo_idle_manually)
-        GGPO_CHECK(ggpo_idle(g_session, 1));
-
-    g_call_ggpo_idle_manually = true;
+    GGPO_CHECK(ggpo_idle(g_session, 1));
 
     const auto frame = g_game->GetState().match2.frame.get() - g_frame_base;
     const auto found = g_saved_state_map.find(frame);
@@ -383,6 +381,8 @@ bool input_data_hook(IGame* game)
             LIBGG_LOG() << "ggpo_synchronize_input" << std::endl;
             g_restore_frame.reset();
         }
+        if (disconnected)
+            g_disconnected = true;
     }
 
     if (!GGPO_SUCCEEDED(result))
@@ -415,35 +415,17 @@ bool game_tick_end_hook(IGame*)
         return true;
     }
 
+    if (g_disconnected && !g_ggpo_frame_advance)
+    {
+        close_session();
+        return true;
+    }
+
     if (!g_restore_frame.has_value() || !g_network_enabled || g_ggpo_frame_advance)
     {
         LIBGG_LOG() << "advance_frame" <<  std::endl;
         GGPO_CHECK(ggpo_advance_frame(g_session));
     }
-
-    return true;
-}
-
-bool sleep_hook(IGame* game)
-{
-    if (!g_session)
-        return true;
-
-    assert(!g_ggpo_frame_advance);
-
-    const auto ms = game->GetSleepTime();
-    using std::chrono::steady_clock;
-    const auto idle_begin = steady_clock::now();
-    GGPO_CHECK(ggpo_idle(g_session, ms));
-    const auto idle_end = steady_clock::now();
-
-    using std::chrono::duration_cast;
-    using std::chrono::milliseconds;
-    const auto idle_ms = duration_cast<milliseconds>(idle_end - idle_begin).count();
-    if (ms > idle_ms)
-        ::Sleep(static_cast<DWORD>(ms - idle_ms));
-
-    g_call_ggpo_idle_manually = false;
 
     return true;
 }
@@ -462,7 +444,6 @@ bool process_objects_hook(IGame* game)
 void Initialize(IGame* game, configuration* cfg)
 {
     game->RegisterCallback(IGame::Event::AfterGetInput, input_data_hook);
-    game->RegisterCallback(IGame::Event::BeforeSleep, sleep_hook);
     game->RegisterCallback(IGame::Event::AfterGameTick, game_tick_end_hook);
     game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
     apply_patches(game->GetImageBase());
