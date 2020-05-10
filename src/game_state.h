@@ -554,6 +554,9 @@ struct match_state_2
     memory_offset<uint64_t[0x3f], 0x50F828> overdrive_or_round_end_rng_related2;
     // at :base+EE899
     memory_offset<uint64_t[0x30], 0x511234> overdrive_or_round_end_rng_related3;
+    // test/replays/matches/session5.ggr (frame 25089, synctest 1f)
+    // at :base+CEBD5
+    ptr_chain<std::array<uint64_t, 0xA>, 0x511658, 0> extra_objects_rng_related1;
 };
 
 struct game_state

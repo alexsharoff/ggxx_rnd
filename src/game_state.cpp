@@ -194,7 +194,8 @@ struct reflect<match_state_2>
         &match_state_2::dustcombo_rng_related2,
         &match_state_2::overdrive_or_round_end_rng_related1,
         &match_state_2::overdrive_or_round_end_rng_related2,
-        &match_state_2::overdrive_or_round_end_rng_related3
+        &match_state_2::overdrive_or_round_end_rng_related3,
+        &match_state_2::extra_objects_rng_related1
     );
 };
 
