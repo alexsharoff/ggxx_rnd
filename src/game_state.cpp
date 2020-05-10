@@ -148,7 +148,8 @@ struct reflect<match_state>
         &match_state::unknown21,*/
         &match_state::unknown22,
         &match_state::unknown23,
-        &match_state::unknown24
+        &match_state::unknown24,
+        &match_state::unknown25
     );
 };
 
@@ -165,6 +166,7 @@ struct reflect<match_state_2>
         &match_state_2::round_end_flag1,
         &match_state_2::round_end_flag2,
         &match_state_2::round_end_flag3,
+        &match_state_2::round_end_flag4,
         &match_state_2::round_state,
         &match_state_2::menu_fibers,
         &match_state_2::rng1,
@@ -190,9 +192,9 @@ struct reflect<match_state_2>
         &match_state_2::slayer_haiku,
         &match_state_2::dustcombo_rng_related1,
         &match_state_2::dustcombo_rng_related2,
-        &match_state_2::overdrive_or_round_end_related1,
-        &match_state_2::overdrive_or_round_end_related2,
-        &match_state_2::overdrive_or_round_end_related3
+        &match_state_2::overdrive_or_round_end_rng_related1,
+        &match_state_2::overdrive_or_round_end_rng_related2,
+        &match_state_2::overdrive_or_round_end_rng_related3
     );
 };
 
@@ -446,7 +448,7 @@ uint32_t state_checksum(const game_state& state)
         std::hash<uint8_t>{}(state.match2.p2_rounds_won.get()) ^
         std::hash<uint32_t>{}(state.match2.round_end_bitmask.get()) ^
         std::hash<uint16_t>{}(state.match2.match_countdown.get()) ^
-        std::hash<uint8_t>{}(state.match2.round_state.get()) ^
+        std::hash<uint32_t>{}(state.match2.round_state.get()) ^
         std::hash<uint64_t>{}(rng1.index) ^
         std::hash<uint64_t>{}(rng1.data[rng1.index])^
         std::hash<uint64_t>{}(rng2.index) ^
@@ -540,5 +542,5 @@ void print_game_state(const game_state& state)
         << "  p2_rounds_won=" << (int)state.match2.p2_rounds_won.get() << std::endl
         << "  match_countdown=" << state.match2.match_countdown.get() << std::endl
         << "  round_end_bitmask=" << state.match2.round_end_bitmask.get() << std::endl
-        << "  round_state=" << (int)state.match2.round_state.get() << std::endl;
+        << "  round_state=" << state.match2.round_state.get() << std::endl;
 }

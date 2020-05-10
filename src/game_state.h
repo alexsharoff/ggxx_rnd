@@ -393,6 +393,11 @@ struct match_state
     // for some calculations involving RNG (:base+6404A)
     // test: test/replays/bugrepro/clash.ggr
     memory_offset<uint32_t, 0x51B0CC> unknown24;
+
+    // test/replays/matches/session4.ggr (synctest 1f)
+    // at :base+25C2EA
+    // active_object_state::active_move depends on this
+    memory_offset<uint32_t[0x56], 0x516288> unknown25;
 };
 
 static_assert(sizeof(player_controller_state) == 152);
@@ -479,7 +484,10 @@ struct match_state_2
     memory_offset<uint16_t, 0x50F800> match_countdown;
     memory_offset<uint32_t, 0x50F804> round_end_flag3;
     memory_offset<uint32_t, 0x555D24> round_end_hitstop;
-    memory_offset<uint8_t, 0x5113C0> round_state;
+    memory_offset<uint32_t, 0x5113C0> round_state;
+    // test/replays/matches/session4.ggr (synctest 1f)
+    // at :base+69333
+    memory_offset<uint32_t, 0x5113C8> round_end_flag4;
     memory_offset<menu_fiber[0x20], 0x54f030> menu_fibers;
     memory_offset<mersenne_twister, 0x565F20> rng1;
     // not sure if needed
@@ -541,11 +549,11 @@ struct match_state_2
     // test/replays/matches/session1.ggr (synctest 8f)
     memory_offset<uint32_t, 0x56CFE4> dustcombo_rng_related2;
     // test/replays/matches/session1.ggr (synctest 1f)
-    memory_offset<uint32_t, 0x511220> overdrive_or_round_end_related1;
+    memory_offset<uint32_t, 0x511220> overdrive_or_round_end_rng_related1;
     // at :base+EE882
-    memory_offset<uint64_t[0x3f], 0x50F828> overdrive_or_round_end_related2;
+    memory_offset<uint64_t[0x3f], 0x50F828> overdrive_or_round_end_rng_related2;
     // at :base+EE899
-    memory_offset<uint64_t[0x30], 0x511234> overdrive_or_round_end_related3;
+    memory_offset<uint64_t[0x30], 0x511234> overdrive_or_round_end_rng_related3;
 };
 
 struct game_state
