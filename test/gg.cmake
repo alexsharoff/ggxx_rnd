@@ -83,4 +83,53 @@ foreach(synctest_frames 1 2 3 4 5 6 7 8)
         ARGS ${args}
         TIMEOUT 400
     )
+
+    add_gg_test(
+        NAME session4.ggr.${synctest_frames}f
+        REPLAY matches/session4.ggr
+        ARGS ${args}
+        TIMEOUT 400
+    )
+
+    add_gg_test(
+        NAME session5.ggr.${synctest_frames}f
+        REPLAY matches/session5.ggr
+        ARGS ${args}
+        TIMEOUT 600
+    )
+
+    add_gg_test(
+        NAME session6.ggr.${synctest_frames}f
+        REPLAY matches/session6.ggr
+        ARGS ${args}
+        TIMEOUT 400
+    )
+
+    add_gg_test(
+        NAME session7.ggr.${synctest_frames}f
+        REPLAY matches/session7.ggr
+        ARGS ${args}
+        TIMEOUT 400
+    )
+
+    add_gg_test(
+        NAME session8.ggr.${synctest_frames}f
+        REPLAY matches/session8.ggr
+        ARGS ${args}
+        TIMEOUT 400
+    )
+
+    add_gg_test(
+        NAME session9.ggr.${synctest_frames}f
+        REPLAY matches/session9.ggr
+        ARGS ${args}
+        TIMEOUT 600
+    )
+
+    add_gg_test(
+        NAME session10.ggr.${synctest_frames}f
+        REPLAY matches/session10.ggr
+        ARGS ${args}
+        TIMEOUT 400
+    )
 endforeach()
