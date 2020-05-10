@@ -26,6 +26,10 @@ add_gg_test(
     REPLAY bugrepro/kliff_taunt.ggr
     ARGS /gamemode training /synctest 8
 )
+add_gg_test(
+    REPLAY bugrepro/justice_double_nb.ggr
+    ARGS /gamemode training /synctest 1
+)
 
 foreach(synctest_frames 1 2 3 4 5 6 7 8)
     set(args
