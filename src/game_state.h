@@ -398,6 +398,11 @@ struct match_state
     // at :base+25C2EA
     // active_object_state::active_move depends on this
     memory_offset<uint32_t[0x56], 0x516288> unknown25;
+
+    // test/replays/bugrepro/justice_double_nb.ggr
+    // at :base+66B35
+    // rng desync after two NBs hit at the same time
+    memory_offset<uint32_t, 0x517CDC> unknown26;
 };
 
 static_assert(sizeof(player_controller_state) == 152);

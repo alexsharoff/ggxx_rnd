@@ -149,7 +149,8 @@ struct reflect<match_state>
         &match_state::unknown22,
         &match_state::unknown23,
         &match_state::unknown24,
-        &match_state::unknown25
+        &match_state::unknown25,
+        &match_state::unknown26
     );
 };
 
