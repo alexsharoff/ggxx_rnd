@@ -331,29 +331,50 @@ void close_session()
     g_timesync_frames = 0;
 }
 
+void limit_fps(IGame* game)
+{
+    game->EnableFpsLimit(true);
+    game->LimitFps();
+    game->EnableFpsLimit(false);
+}
+
 bool input_data_hook(IGame* game)
 {
     if (!g_session)
         return true;
 
-    const auto& network_args = g_cfg->get_args().network;
+    IGame::input_t timesync_input{};
+    if (!g_ggpo_frame_advance && g_drawing_enabled)
+    {
+        limit_fps(game);
+        if (g_timesync_frames > 0 && (g_game->GetState().match2.frame.get() % 7 == 0))
+        {
+            timesync_input = game->GetInputRemapped();
+            limit_fps(game);
+            --g_timesync_frames;
+            if (g_timesync_frames > 0)
+                g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
+            else
+                g_status_msg.clear();
+        }
+    }
+
     auto input = game->GetInputRemapped();
-    if (network_args.side == 2)
-        std::swap(input[0], input[1]);
+    input[0] |= timesync_input[0];
+    input[1] |= timesync_input[1];
 
     if (g_restore_frame.has_value())
     {
         g_game->SetState(*g_saved_state_map.at(*g_restore_frame));
     }
 
-    if (!g_ggpo_frame_advance && g_drawing_enabled)
-    {
-        game->EnableFpsLimit(true);
-        game->LimitFps();
-        game->EnableFpsLimit(false);
-    }
+    const auto& network_args = g_cfg->get_args().network;
+    if (network_args.side == 2)
+        std::swap(input[0], input[1]);
 
-    GGPO_CHECK(ggpo_idle(g_session, 1));
+    // timeout argument isn't used for anything useful,
+    // so let's just set it to 0.
+    GGPO_CHECK(ggpo_idle(g_session, 0));
 
     const auto frame = g_game->GetState().match2.frame.get() - g_frame_base;
     const auto found = g_saved_state_map.find(frame);
@@ -428,16 +449,6 @@ bool game_tick_end_hook(IGame*)
         {
             close_session();
             return true;
-        }
-
-        if (g_timesync_frames > 0 && (g_game->GetState().match2.frame.get() % 6 == 0))
-        {
-            ::Sleep(16);
-            --g_timesync_frames;
-            if (g_timesync_frames > 0)
-                g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
-            else
-                g_status_msg.clear();
         }
     }
 
