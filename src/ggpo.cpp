@@ -26,9 +26,6 @@
         } \
     } while(false)
 
-#pragma once
-
-
 namespace ggpo
 {
 
