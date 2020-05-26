@@ -61,6 +61,13 @@ foreach(synctest_frames 1 2 3 4 5 6 7 8)
     )
 
     add_gg_test(
+        NAME faust_vs_faust.ggr.${synctest_frames}f
+        REPLAY matches/faust_vs_faust.ggr
+        ARGS ${args}
+        TIMEOUT 120
+    )
+
+    add_gg_test(
         NAME slayer_vs_may.ggr.${synctest_frames}f
         REPLAY matches/slayer_vs_may.ggr
         ARGS ${args}
