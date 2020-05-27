@@ -1,6 +1,7 @@
 #include "game_state.h"
 
 #include <iostream>
+#include <string>
 
 
 using mini_reflection::reflect;
@@ -408,6 +409,26 @@ uint32_t state_checksum(const game_state& state)
             std::hash<uint32_t>{}(state.match.char_mode_gold.get()[i]);
     }
 
+    const auto& projectiles_ptr = state.match.projectiles.get().ptr;
+    if (projectiles_ptr.has_value())
+    {
+        for (const auto& object : *projectiles_ptr)
+        {
+            if (object.id)
+                hash ^= object_checksum(object);
+        }
+    }
+
+    const auto& noninteractives_ptr = state.match.extra_objects.get().ptr;
+    if (noninteractives_ptr.has_value())
+    {
+        for (const auto& object : *noninteractives_ptr)
+        {
+            if (object.id)
+                hash ^= object_checksum(object);
+        }
+    }
+
     const auto& data = state.match.data.get();
     hash ^= std::hash<uint32_t>{}(data.selected_palette[0]) ^
         std::hash<uint32_t>{}(data.selected_palette[1]) ^
@@ -439,9 +460,6 @@ uint32_t state_checksum(const game_state& state)
 
     const auto& rng1 = state.match2.rng1.get();
     const auto& rng2 = state.match2.rng2.get();
-    // TODO: hash projectiles, extra_objs
-    //const auto projectile_begin = state.match.projectiles.get().ptr.value().data;
-    //const auto extra_obj_begin = state.match.extra_objects.get().ptr.value().data;
     return
         hash ^
         std::hash<uint32_t>{}(state.match2.rand_seed) ^
@@ -461,28 +479,30 @@ uint32_t state_checksum(const game_state& state)
 void print_object(const active_object_state& obj, const std::string_view& name = "object")
 {
     std::cout
-        << "  " << name << "::id=" << obj.id << std::endl
-        << "    " << name << "::facing=" << (int)obj.facing << std::endl
-        << "    " << name << "::side=" << (int)obj.side << std::endl
-        << "    " << name << "::status_bitmask=" << obj.status_bitmask << std::endl
-        << "    " << name << "::health=" << obj.health << std::endl
-        << "    " << name << "::hitbox_count=" << (int)obj.hitbox_count << std::endl
-        << "    " << name << "::pos_x=" << obj.pos_x << std::endl
-        << "    " << name << "::pos_y=" << obj.pos_y << std::endl
-        << "    " << name << "::velocity_x=" << obj.velocity_x << std::endl
-        << "    " << name << "::velocity_y=" << obj.velocity_y << std::endl
-        << "    " << name << "::active_move=" << obj.active_move << std::endl
-        << "    " << name << "::active_move_frame=" << obj.active_move_frame << std::endl;
+        << "  " << name << ':' << std::endl
+        << "    id=" << obj.id << std::endl
+        << "    facing=" << (int)obj.facing << std::endl
+        << "    side=" << (int)obj.side << std::endl
+        << "    status_bitmask=" << obj.status_bitmask << std::endl
+        << "    health=" << obj.health << std::endl
+        << "    hitbox_count=" << (int)obj.hitbox_count << std::endl
+        << "    pos_x=" << obj.pos_x << std::endl
+        << "    pos_y=" << obj.pos_y << std::endl
+        << "    velocity_x=" << obj.velocity_x << std::endl
+        << "    velocity_y=" << obj.velocity_y << std::endl
+        << "    active_move=" << obj.active_move << std::endl
+        << "    active_move_frame=" << obj.active_move_frame << std::endl;
 }
 
 void print_object(const gg_char_state& obj, const std::string_view& name = "char")
 {
     std::cout
-        << "    " << name << "::stun_accumulator=" << obj.stun_accumulator << std::endl
-        << "    " << name << "::faint_countdown=" << obj.faint_countdown << std::endl
-        << "    " << name << "::tension=" << obj.tension << std::endl
-        << "    " << name << "::guard=" << obj.guard << std::endl
-        << "    " << name << "::burst=" << obj.burst << std::endl;
+        << "  " << name << ':' << std::endl
+        << "    stun_accumulator=" << obj.stun_accumulator << std::endl
+        << "    faint_countdown=" << obj.faint_countdown << std::endl
+        << "    tension=" << obj.tension << std::endl
+        << "    guard=" << obj.guard << std::endl
+        << "    burst=" << obj.burst << std::endl;
 }
 
 // TODO: implement and use pretty_print.h here
@@ -495,13 +515,37 @@ void print_game_state(const game_state& state)
     if (p1.has_value())
     {
         print_object(p1.value(), "p1");
-        print_object(p1_char_state, "p1");
+        print_object(p1_char_state, "p1_char");
     }
     const auto& p2 = state.match.p2_character.get().ptr;
     if (p2.has_value())
     {
         print_object(p2.value(), "p2");
-        print_object(p2_char_state, "p2");
+        print_object(p2_char_state, "p2_char");
+    }
+
+    const auto& projectiles_ptr = state.match.projectiles.get().ptr;
+    if (projectiles_ptr.has_value())
+    {
+        size_t idx = 0;
+        for (const auto& object : *projectiles_ptr)
+        {
+            if (object.id)
+                print_object(object, ("projectile[" + std::to_string(idx) + "]"));
+            ++idx;
+        }
+    }
+
+    const auto& noninteractives_ptr = state.match.extra_objects.get().ptr;
+    if (noninteractives_ptr.has_value())
+    {
+        size_t idx = 0;
+        for (const auto& object : *noninteractives_ptr)
+        {
+            if (object.id)
+                print_object(object, ("noninteractive[" + std::to_string(idx) + "]"));
+            ++idx;
+        }
     }
 
     std::cout << "  next_fiber_id=" << (uint32_t)state.match2.next_fiber_id.get() << std::endl;
