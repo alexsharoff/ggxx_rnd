@@ -5,7 +5,6 @@
 
 #include <array>
 #include <memory>
-#include <utility>
 
 
 using memory_dump::ptr_chain;
@@ -323,6 +322,7 @@ struct match_state
     memory_offset<ptr_chain<active_object_state, 0, 0>, 0x516778> p1_character;
     memory_offset<ptr_chain<active_object_state, 0, 0x130>, 0x516778> p2_character;
 
+    memory_offset<void*, 0x51677C> projectiles_ptr;
     // test/replays/matches/session2.ggr (synctest 2f)
     memory_offset<ptr_chain<std::array<active_object_state, 0x80>, 0, 0>, 0x51677C> projectiles;
 

@@ -92,13 +92,14 @@ struct reflect<match_state>
         &match_state::char_mode_sp,
         &match_state::controller_state,
         &match_state::controller_state2,
-        &match_state::extra_objects_meta,
         &match_state::extra_objects,
+        &match_state::extra_objects_meta,
         &match_state::p1_character,
         &match_state::p2_character,
         &match_state::p1_character_ptr,
         &match_state::p2_character_ptr,
         &match_state::projectiles,
+        &match_state::projectiles_ptr,
         &match_state::training_mode_history,
         &match_state::training_mode_cfg_display,
         &match_state::training_mode_data,
@@ -363,117 +364,132 @@ void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_
     }
 }
 
-// TODO: use memory_dump::for_each_member_addr here
-uint32_t object_checksum(const active_object_state& obj)
+// Fowler–Noll–Vo hash function
+size_t fnv1a_hash_range(const uint8_t* data, size_t len, size_t offset_basis = 2166136261)
 {
-    return std::hash<uint16_t>{}(obj.id)
-        ^ std::hash<uint8_t>{}(obj.facing)
-        ^ std::hash<uint8_t>{}(obj.side)
-        ^ std::hash<uint32_t>{}(obj.status_bitmask)
-        ^ std::hash<uint16_t>{}(obj.health)
-        ^ std::hash<uint8_t>{}(obj.hitbox_count)
-        ^ std::hash<uint32_t>{}(obj.pos_x)
-        ^ std::hash<uint32_t>{}(obj.pos_y)
-        ^ std::hash<uint32_t>{}(obj.velocity_x)
-        ^ std::hash<uint32_t>{}(obj.velocity_y)
-        ^ std::hash<uint32_t>{}(obj.active_move)
-        ^ std::hash<uint32_t>{}(obj.active_move_frame);
+    const size_t prime = 16777619;
+    for (size_t i = 0; i < len; ++i)
+    {
+        offset_basis ^= static_cast<size_t>(data[i]);
+        offset_basis *= prime;
+    }
+    return offset_basis;
 }
 
-uint32_t object_checksum(const gg_char_state& obj)
+template <class T>
+size_t fnv1a_hash_value(const T& value, size_t offset_basis = 2166136261)
 {
-    return std::hash<uint16_t>{}(obj.stun_accumulator)
-        ^ std::hash<uint16_t>{}(obj.faint_countdown)
-        ^ std::hash<uint16_t>{}(obj.tension)
-        ^ std::hash<uint16_t>{}(obj.guard)
-        ^ std::hash<uint16_t>{}(obj.burst);
+    return fnv1a_hash_range(
+        reinterpret_cast<const uint8_t*>(&value),
+        sizeof(value),
+        offset_basis
+    );
+}
+
+size_t object_checksum(const active_object_state& obj, uint32_t init)
+{
+    return fnv1a_hash_range(reinterpret_cast<const uint8_t*>(&obj), 0x130, init);
+}
+
+size_t object_checksum(const gg_char_state& obj, uint32_t init)
+{
+    return fnv1a_hash_value(obj, init);
 }
 
 // TODO: implement proper (mini_reflection::for_each_member)
-uint32_t state_checksum(const game_state& state)
+size_t state_checksum(const game_state& state)
 {
-    uint32_t hash = 0x83215609; // initial hash value, prime number
+    auto hash = fnv1a_hash_range(0, 0);
     auto& p1_char_state = state.match.character_state.get()[0];
     auto& p2_char_state = state.match.character_state.get()[1];
     const auto& p1 = state.match.p1_character.get().ptr;
     if (p1.has_value())
-        hash ^= object_checksum(p1.value()) ^ object_checksum(p1_char_state);
+    {
+        hash = object_checksum(p1.value(), hash);
+        hash = object_checksum(p1_char_state, hash);
+    }
     const auto& p2 = state.match.p2_character.get().ptr;
     if (p2.has_value())
-        hash ^= object_checksum(p2.value()) ^ object_checksum(p2_char_state);
+    {
+        hash = object_checksum(p2.value(), hash);
+        hash = object_checksum(p2_char_state, hash);
+    }
 
     for (size_t i = 0; i < 2; ++i)
     {
-        hash ^= std::hash<uint32_t>{}(state.match.char_mode_ex.get()[i]) ^
-            std::hash<uint32_t>{}(state.match.char_mode_sp.get()[i]) ^
-            std::hash<uint32_t>{}(state.match.char_mode_gold.get()[i]);
+        hash = fnv1a_hash_value(state.match.char_mode_ex.get()[i], hash);
+        hash = fnv1a_hash_value(state.match.char_mode_sp.get()[i], hash);
+        hash = fnv1a_hash_value(state.match.char_mode_gold.get()[i], hash);
     }
 
     const auto& projectiles_ptr = state.match.projectiles.get().ptr;
     if (projectiles_ptr.has_value())
     {
+        size_t idx = 0;
         for (const auto& object : *projectiles_ptr)
         {
             if (object.id)
-                hash ^= object_checksum(object);
+            {
+                hash = object_checksum(object, hash);
+                hash = fnv1a_hash_value(idx, hash);
+            }
+            ++idx;
         }
     }
 
     const auto& noninteractives_ptr = state.match.extra_objects.get().ptr;
     if (noninteractives_ptr.has_value())
     {
+        size_t idx = 0;
         for (const auto& object : *noninteractives_ptr)
         {
             if (object.id)
-                hash ^= object_checksum(object);
+            {
+                hash = object_checksum(object, hash);
+                hash = fnv1a_hash_value(idx, hash);
+            }
+            ++idx;
         }
     }
 
     const auto& data = state.match.data.get();
-    hash ^= std::hash<uint32_t>{}(data.selected_palette[0]) ^
-        std::hash<uint32_t>{}(data.selected_palette[1]) ^
-        std::hash<uint32_t>{}(data.selected_char[0]) ^
-        std::hash<uint32_t>{}(data.selected_char[1]) ^
-        std::hash<uint32_t>{}(data.winner) ^
-        std::hash<uint32_t>{}(data.winstreak);
+    hash = fnv1a_hash_value(data.selected_palette[0], hash);
+    hash = fnv1a_hash_value(data.selected_palette[1], hash);
+    hash = fnv1a_hash_value(data.selected_char[0], hash);
+    hash = fnv1a_hash_value(data.selected_char[1], hash);
+    hash = fnv1a_hash_value(data.winner, hash);
+    hash = fnv1a_hash_value(data.winstreak, hash);
 
     uint32_t next_fiber_id = static_cast<uint32_t>(state.match2.next_fiber_id.get());
-    hash ^= std::hash<uint32_t>{}(next_fiber_id);
+    hash = fnv1a_hash_value(next_fiber_id, hash);
     for (const auto& f : state.match2.menu_fibers.get())
     {
-        hash ^= std::hash<uint32_t>{}(f.status);
+        hash = fnv1a_hash_value(f.status, hash);
         if (f.status)
-        {
-            for (char c : f.name)
-            {
-                hash ^= std::hash<char>{}(c);
-            }
-        }
+            hash = fnv1a_hash_range(reinterpret_cast<const uint8_t*>(f.name), sizeof(f.name), hash);
     }
 
     if (!state.fibers.empty())
     {
-        hash ^= std::hash<uint32_t>{}(state.fiber_state.stage_select_controller.get()) ^
-            std::hash<uint64_t>{}(state.fiber_state.random_stage_sequence.get()[0]) ^
-            std::hash<uint64_t>{}(state.fiber_state.random_char_sequence.get()[0]);
+        hash = fnv1a_hash_value(state.fiber_state.stage_select_controller.get(), hash);
+        hash = fnv1a_hash_value(state.fiber_state.random_stage_sequence.get()[0], hash);
+        hash = fnv1a_hash_value(state.fiber_state.random_char_sequence.get()[0], hash);
     }
 
     const auto& rng1 = state.match2.rng1.get();
     const auto& rng2 = state.match2.rng2.get();
-    return
-        hash ^
-        std::hash<uint32_t>{}(state.match2.rand_seed) ^
-        std::hash<uint32_t>{}(state.match2.selected_bgm.get()) ^
-        std::hash<uint32_t>{}(state.match2.selected_stage.get()) ^
-        std::hash<uint8_t>{}(state.match2.p1_rounds_won.get()) ^
-        std::hash<uint8_t>{}(state.match2.p2_rounds_won.get()) ^
-        std::hash<uint32_t>{}(state.match2.round_end_bitmask.get()) ^
-        std::hash<uint16_t>{}(state.match2.match_countdown.get()) ^
-        std::hash<uint32_t>{}(state.match2.round_state.get()) ^
-        std::hash<uint64_t>{}(rng1.index) ^
-        std::hash<uint64_t>{}(rng1.data[rng1.index])^
-        std::hash<uint64_t>{}(rng2.index) ^
-        std::hash<uint64_t>{}(rng2.data[rng2.index]);
+    hash = fnv1a_hash_value(state.match2.rand_seed, hash);
+    hash = fnv1a_hash_value(state.match2.selected_bgm.get(), hash);
+    hash = fnv1a_hash_value(state.match2.selected_stage.get(), hash);
+    hash = fnv1a_hash_value(state.match2.p1_rounds_won.get(), hash);
+    hash = fnv1a_hash_value(state.match2.p2_rounds_won.get(), hash);
+    hash = fnv1a_hash_value(state.match2.round_end_bitmask.get(), hash);
+    hash = fnv1a_hash_value(state.match2.match_countdown.get(), hash);
+    hash = fnv1a_hash_value(state.match2.round_state.get(), hash);
+    hash = fnv1a_hash_value(rng1.index, hash);
+    hash = fnv1a_hash_value(rng1.data[rng1.index], hash);
+    hash = fnv1a_hash_value(rng2.index, hash);
+    return fnv1a_hash_value(rng2.data[rng2.index], hash);
 }
 
 void print_object(const active_object_state& obj, const std::string_view& name = "object")
