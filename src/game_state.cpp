@@ -1,5 +1,7 @@
 #include "game_state.h"
 
+#include "util.h"
+
 #include <iostream>
 #include <string>
 
@@ -364,62 +366,35 @@ void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_
     }
 }
 
-// Fowler–Noll–Vo hash function
-size_t fnv1a_hash_range(const uint8_t* data, size_t len, size_t offset_basis = 2166136261)
+void object_checksum(Fnv1aHash<>& hash, const active_object_state& obj)
 {
-    const size_t prime = 16777619;
-    for (size_t i = 0; i < len; ++i)
-    {
-        offset_basis ^= static_cast<size_t>(data[i]);
-        offset_basis *= prime;
-    }
-    return offset_basis;
-}
-
-template <class T>
-size_t fnv1a_hash_value(const T& value, size_t offset_basis = 2166136261)
-{
-    return fnv1a_hash_range(
-        reinterpret_cast<const uint8_t*>(&value),
-        sizeof(value),
-        offset_basis
-    );
-}
-
-size_t object_checksum(const active_object_state& obj, uint32_t init)
-{
-    return fnv1a_hash_range(reinterpret_cast<const uint8_t*>(&obj), 0x130, init);
-}
-
-size_t object_checksum(const gg_char_state& obj, uint32_t init)
-{
-    return fnv1a_hash_value(obj, init);
+    hash.add(reinterpret_cast<const uint8_t*>(&obj), 0x130);
 }
 
 // TODO: implement proper (mini_reflection::for_each_member)
 size_t state_checksum(const game_state& state)
 {
-    auto hash = fnv1a_hash_range(0, 0);
+    Fnv1aHash hash;
     auto& p1_char_state = state.match.character_state.get()[0];
     auto& p2_char_state = state.match.character_state.get()[1];
     const auto& p1 = state.match.p1_character.get().ptr;
     if (p1.has_value())
     {
-        hash = object_checksum(p1.value(), hash);
-        hash = object_checksum(p1_char_state, hash);
+        object_checksum(hash, p1.value());
+        hash.add(p1_char_state);
     }
     const auto& p2 = state.match.p2_character.get().ptr;
     if (p2.has_value())
     {
-        hash = object_checksum(p2.value(), hash);
-        hash = object_checksum(p2_char_state, hash);
+        object_checksum(hash, p2.value());
+        hash.add(p2_char_state);
     }
 
     for (size_t i = 0; i < 2; ++i)
     {
-        hash = fnv1a_hash_value(state.match.char_mode_ex.get()[i], hash);
-        hash = fnv1a_hash_value(state.match.char_mode_sp.get()[i], hash);
-        hash = fnv1a_hash_value(state.match.char_mode_gold.get()[i], hash);
+        hash.add(state.match.char_mode_ex.get()[i]);
+        hash.add(state.match.char_mode_sp.get()[i]);
+        hash.add(state.match.char_mode_gold.get()[i]);
     }
 
     const auto& projectiles_ptr = state.match.projectiles.get().ptr;
@@ -430,8 +405,8 @@ size_t state_checksum(const game_state& state)
         {
             if (object.id)
             {
-                hash = object_checksum(object, hash);
-                hash = fnv1a_hash_value(idx, hash);
+                object_checksum(hash, object);
+                hash.add(idx);
             }
             ++idx;
         }
@@ -445,51 +420,52 @@ size_t state_checksum(const game_state& state)
         {
             if (object.id)
             {
-                hash = object_checksum(object, hash);
-                hash = fnv1a_hash_value(idx, hash);
+                object_checksum(hash, object);
+                hash.add(idx);
             }
             ++idx;
         }
     }
 
     const auto& data = state.match.data.get();
-    hash = fnv1a_hash_value(data.selected_palette[0], hash);
-    hash = fnv1a_hash_value(data.selected_palette[1], hash);
-    hash = fnv1a_hash_value(data.selected_char[0], hash);
-    hash = fnv1a_hash_value(data.selected_char[1], hash);
-    hash = fnv1a_hash_value(data.winner, hash);
-    hash = fnv1a_hash_value(data.winstreak, hash);
+    hash.add(data.selected_palette[0]);
+    hash.add(data.selected_palette[1]);
+    hash.add(data.selected_char[0]);
+    hash.add(data.selected_char[1]);
+    hash.add(data.winner);
+    hash.add(data.winstreak);
 
     uint32_t next_fiber_id = static_cast<uint32_t>(state.match2.next_fiber_id.get());
-    hash = fnv1a_hash_value(next_fiber_id, hash);
+    hash.add(next_fiber_id);
     for (const auto& f : state.match2.menu_fibers.get())
     {
-        hash = fnv1a_hash_value(f.status, hash);
+        hash.add(f.status);
         if (f.status)
-            hash = fnv1a_hash_range(reinterpret_cast<const uint8_t*>(f.name), sizeof(f.name), hash);
+            hash.add(reinterpret_cast<const uint8_t*>(f.name), sizeof(f.name));
     }
 
     if (!state.fibers.empty())
     {
-        hash = fnv1a_hash_value(state.fiber_state.stage_select_controller.get(), hash);
-        hash = fnv1a_hash_value(state.fiber_state.random_stage_sequence.get()[0], hash);
-        hash = fnv1a_hash_value(state.fiber_state.random_char_sequence.get()[0], hash);
+        hash.add(state.fiber_state.stage_select_controller.get());
+        hash.add(state.fiber_state.random_stage_sequence.get()[0]);
+        hash.add(state.fiber_state.random_char_sequence.get()[0]);
     }
 
     const auto& rng1 = state.match2.rng1.get();
     const auto& rng2 = state.match2.rng2.get();
-    hash = fnv1a_hash_value(state.match2.rand_seed, hash);
-    hash = fnv1a_hash_value(state.match2.selected_bgm.get(), hash);
-    hash = fnv1a_hash_value(state.match2.selected_stage.get(), hash);
-    hash = fnv1a_hash_value(state.match2.p1_rounds_won.get(), hash);
-    hash = fnv1a_hash_value(state.match2.p2_rounds_won.get(), hash);
-    hash = fnv1a_hash_value(state.match2.round_end_bitmask.get(), hash);
-    hash = fnv1a_hash_value(state.match2.match_countdown.get(), hash);
-    hash = fnv1a_hash_value(state.match2.round_state.get(), hash);
-    hash = fnv1a_hash_value(rng1.index, hash);
-    hash = fnv1a_hash_value(rng1.data[rng1.index], hash);
-    hash = fnv1a_hash_value(rng2.index, hash);
-    return fnv1a_hash_value(rng2.data[rng2.index], hash);
+    hash.add(state.match2.rand_seed);
+    hash.add(state.match2.selected_bgm.get());
+    hash.add(state.match2.selected_stage.get());
+    hash.add(state.match2.p1_rounds_won.get());
+    hash.add(state.match2.p2_rounds_won.get());
+    hash.add(state.match2.round_end_bitmask.get());
+    hash.add(state.match2.match_countdown.get());
+    hash.add(state.match2.round_state.get());
+    hash.add(rng1.index);
+    hash.add(rng1.data[rng1.index]);
+    hash.add(rng2.index);
+    hash.add(rng2.data[rng2.index]);
+    return hash.get();
 }
 
 void print_object(const active_object_state& obj, const std::string_view& name = "object")

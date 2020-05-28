@@ -1,9 +1,9 @@
 
 #include "sound_fix.h"
+#include "util.h"
 
 #include <unordered_map>
 #include <unordered_set>
-#include <utility>
 
 
 // Sound fix for rollbacks (ggpo.cpp) and frame rewind (recorder.cpp)
@@ -22,7 +22,7 @@ struct pair_hash
     template<class T1, class T2>
     std::size_t operator() (const std::pair<T1, T2>& pair) const
     {
-        return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
+        return Fnv1aHash().add(pair.first).add(pair.second).get();
     }
 };
 using sound_set_t = std::unordered_set<std::pair<const IXACT3WaveBank*, int16_t>, pair_hash>;

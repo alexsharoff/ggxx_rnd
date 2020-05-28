@@ -102,10 +102,10 @@ bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 
     *buffer = (unsigned char*)state_ptr.get();
     *len = sizeof(game_state);
-    *checksum = state_checksum(*state_ptr);
 
     if (g_cfg->get_args().synctest_frames > 0)
     {
+        *checksum = state_checksum(*state_ptr);
         auto found = g_saved_state_map.find(frame);
         if (found != g_saved_state_map.end())
         {
@@ -324,7 +324,7 @@ void close_session()
     g_saved_state_map.clear();
     g_network_enabled = false;
     g_disconnected = false;
-    g_status_msg = "";
+    g_status_msg = "SESSION CLOSED";
     g_timesync_frames = 0;
 }
 
