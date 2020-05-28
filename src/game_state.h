@@ -557,6 +557,9 @@ struct match_state_2
     // test/replays/matches/session7.ggr (frame 4941, synctest 1f)
     // at :base+CD3D0
     memory_offset<uint32_t, 0x555D8C> round_end_rng_related1;
+    // test/replays/matches/session10.ggr (frame 0x2e0, synctest 1f)
+    // at :base+C1B62
+    ptr_chain<std::array<uint32_t, 0x20>, 0x511908, 0> noninteractives_related;
 };
 
 struct game_state
