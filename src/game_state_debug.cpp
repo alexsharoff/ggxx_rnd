@@ -2,6 +2,7 @@
 
 #include "util.h"
 
+#include <iomanip>
 #include <iostream>
 #include <string>
 
@@ -110,20 +111,23 @@ size_t state_checksum(const game_state& state)
 
 void print_object(const active_object_state& obj, const std::string_view& name = "object")
 {
-    std::cout
-        << "  " << name << ':' << std::endl
-        << "    id=" << obj.id << std::endl
-        << "    facing=" << (int)obj.facing << std::endl
-        << "    side=" << (int)obj.side << std::endl
-        << "    status_bitmask=" << obj.status_bitmask << std::endl
-        << "    health=" << obj.health << std::endl
-        << "    hitbox_count=" << (int)obj.hitbox_count << std::endl
-        << "    pos_x=" << obj.pos_x << std::endl
-        << "    pos_y=" << obj.pos_y << std::endl
-        << "    velocity_x=" << obj.velocity_x << std::endl
-        << "    velocity_y=" << obj.velocity_y << std::endl
-        << "    active_move=" << obj.active_move << std::endl
-        << "    active_move_frame=" << obj.active_move_frame << std::endl;
+    decltype(std::cout)::fmtflags fmtflags_backup(std::cout.flags());
+
+    std::cout << "  " << name << ':' << std::endl;
+    auto data = reinterpret_cast<const uint8_t*>(&obj);
+    for (size_t i = 0; i < 0x13; ++i)
+    {
+        std::cout << std::setfill('0') << std::setw(2) << i;
+        for (size_t j = 0; j < 16; ++j)
+        {
+            if (j % 4 == 0)
+                std::cout << ' ';
+            std::cout << std::setfill('0') << std::setw(2) << std::hex << (int)data[i * 16 + j];
+        }
+        std::cout << std::endl;
+    }
+
+    std::cout.flags(fmtflags_backup);
 }
 
 void print_object(const gg_char_state& obj, const std::string_view& name = "char")
@@ -137,7 +141,6 @@ void print_object(const gg_char_state& obj, const std::string_view& name = "char
         << "    burst=" << obj.burst << std::endl;
 }
 
-// TODO: implement and use pretty_print.h here
 void print_game_state(const game_state& state)
 {
     std::cout << "frame=" << state.match2.frame.get() << std::endl;
