@@ -1,5 +1,6 @@
 #include "ggpo.h"
 
+#include "game_state_debug.h"
 #include "memory_dump.h"
 #include "util.h"
 
