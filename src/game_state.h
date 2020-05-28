@@ -197,25 +197,17 @@ struct mersenne_twister
 
 static_assert(sizeof(mersenne_twister) == 5008);
 
-#pragma pack(push, 1)
-template<size_t Size>
-struct data_size
-{
-    uint8_t data[Size];
-};
-#pragma pack(pop)
-
-struct active_object_state;
-typedef int (palette_reset_func_t)(const active_object_state*);
+struct gg_object;
+typedef int (palette_reset_func_t)(const gg_object*);
 
 #pragma pack(push, 1)
-struct active_object_state
+struct gg_object
 {
     uint16_t id; // 0
     uint8_t facing; // 2
     uint8_t side; // 3
-    active_object_state* prev; // 4
-    active_object_state* next; // 8
+    gg_object* prev; // 4
+    gg_object* next; // 8
     uint32_t status_bitmask; // C
     uint32_t unknown_bitmask; // 10
     uint16_t active_move_prev; // 14
@@ -224,7 +216,7 @@ struct active_object_state
     uint16_t active_move_followup; // 1a
     uint16_t active_move_frame; // 1c
     uint16_t health; // 1e
-    active_object_state* other_; // 20
+    gg_object* other_; // 20
     uint16_t last_jump_dir; // 24
     uint8_t unknown3; // 26
     uint8_t owner_id; // 27
@@ -240,14 +232,14 @@ struct active_object_state
     uint32_t unknown6[2]; // 4C
     void* hitbox_array; // 54
     uint32_t unknown7[3]; // 58
-    active_object_state* other1; // 64
+    gg_object* other1; // 64
     uint32_t unknown8; // 68
-    active_object_state* other2; // 6C
+    gg_object* other2; // 6C
     uint8_t unknown9[0x14]; // 70
     uint8_t hitbox_count; // 84
     uint8_t unknown99[3]; // 85
-    data_size<0x5c>* data_5c1_ptr; // 88
-    data_size<0x5c>* data_5c2_ptr; // 8C
+    void* data_5c1_ptr; // 88
+    void* data_5c2_ptr; // 8C
     void* hit_block_callback; // 90
     palette_reset_func_t* reset_palette_callback; // 94
     uint8_t unknown10[0x14]; // 98
@@ -268,12 +260,12 @@ struct active_object_state
     uint8_t hitstop_countdown; // fd
     uint8_t unknown17[0x32]; // fe - 130
 
-    ptr_chain<data_size<0x5c>, 0x88, 0> data_5c1;
-    ptr_chain<data_size<0x5c>, 0x8c, 0> data_5c2;
+    ptr_chain<std::array<uint8_t, 0x5c>, 0x88, 0> data_5c1;
+    ptr_chain<std::array<uint8_t, 0x5c>, 0x8c, 0> data_5c2;
 };
 #pragma pack(pop)
 
-//static_assert(sizeof(active_object_state) == 0x130);
+//static_assert(sizeof(gg_object) == 0x130);
 
 enum class fiber_id : uint32_t
 {
@@ -314,17 +306,17 @@ struct match_state
     memory_offset<controller_state[2], 0x51EDC8> controller_state;
     // not sure if this is used outside of built-in netplay
     memory_offset<::controller_state[2], 0x51E968> controller_state2;
-    memory_offset<uint8_t[0x24], 0x519E50> extra_objects_meta;
+    memory_offset<uint8_t[0x24], 0x519E50> noninteractives_meta;
     // TODO: optimize by capturing only objects in use
-    memory_offset<ptr_chain<std::array<active_object_state, 0x17f>, 0, 0>, 0x519E50> extra_objects;
-    memory_offset<active_object_state*, 0x516778> p1_character_ptr;
-    memory_offset<active_object_state*, 0x51A07C> p2_character_ptr;
-    memory_offset<ptr_chain<active_object_state, 0, 0>, 0x516778> p1_character;
-    memory_offset<ptr_chain<active_object_state, 0, 0x130>, 0x516778> p2_character;
+    memory_offset<ptr_chain<std::array<gg_object, 0x17f>, 0, 0>, 0x519E50> noninteractives;
+    memory_offset<gg_object*, 0x516778> p1_character_ptr;
+    memory_offset<gg_object*, 0x51A07C> p2_character_ptr;
+    memory_offset<ptr_chain<gg_object, 0, 0>, 0x516778> p1_character;
+    memory_offset<ptr_chain<gg_object, 0, 0x130>, 0x516778> p2_character;
 
     memory_offset<void*, 0x51677C> projectiles_ptr;
     // test/replays/matches/session2.ggr (synctest 2f)
-    memory_offset<ptr_chain<std::array<active_object_state, 0x80>, 0, 0>, 0x51677C> projectiles;
+    memory_offset<ptr_chain<std::array<gg_object, 0x60>, 0, 0>, 0x51677C> projectiles;
 
     memory_offset<uint8_t[0x120], 0x4FDC00> training_mode_history;
     memory_offset<uint8_t, 0x4FDD20> training_mode_cfg_display;
@@ -335,7 +327,7 @@ struct match_state
 
     memory_offset<uint8_t[0x90], 0x50AA0C> extra_rng_state1;
     // test/replays/matches/session3.ggr (synctest 2f)
-    memory_offset<ptr_chain<data_size<0x60>, 0, 0>, 0x50AAE4> extra_rng_state2;
+    memory_offset<ptr_chain<std::array<uint8_t, 0x60>, 0, 0>, 0x50AAE4> extra_rng_state2;
 
     // TODO: try to shorten / remove some of this stuff
     memory_offset<uint8_t, 0x505A7D> graphics1;
@@ -348,7 +340,7 @@ struct match_state
     memory_offset<uint32_t, 0x5066B4> graphics8;
     memory_offset<uint8_t[0x8FA8], 0x521268> graphics9;
     memory_offset<uint32_t, 0x5476E8> graphics10;
-    memory_offset<ptr_chain<data_size<0x19D78>, 0, 0>, 0x5480F0> graphics11;
+    memory_offset<ptr_chain<std::array<uint8_t, 0x19D78>, 0, 0>, 0x5480F0> graphics11;
     memory_offset<uint32_t, 0x548104> graphics12;
     memory_offset<uint32_t, 0x5489E0> graphics13;
     memory_offset<uint32_t, 0x5489F0> graphics14;
@@ -363,7 +355,7 @@ struct match_state
     memory_offset<uint32_t, 0x3E37FC> unknown1;
     memory_offset<uint32_t, 0x4F80E4> unknown2;
     memory_offset<uint32_t, 0x5113B4> unknown3;
-    memory_offset<active_object_state, 0x517BA8> unknown4;
+    memory_offset<gg_object, 0x517BA8> unknown4;
     memory_offset<uint32_t, 0x51B798> unknown5;
     memory_offset<uint32_t, 0x51B7A4> unknown6;
     memory_offset<uint32_t, 0x51B9DC> unknown8;
@@ -374,13 +366,13 @@ struct match_state
     memory_offset<uint32_t, 0x555D28> unknown13;
     memory_offset<uint32_t, 0x55602C> unknown14;
     memory_offset<uint32_t, 0x5561A8> unknown15;
-    memory_offset<active_object_state, 0x517A78> unknown16;
+    memory_offset<gg_object, 0x517A78> unknown16;
     memory_offset<uint8_t[0x2800], 0x5489F8> unknown17;
     memory_offset<uint8_t[0x2800], 0x54B198> unknown18;
     memory_offset<uint8_t[0x54], 0x506690> unknown19;
-    memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A4> unknown20;
-    memory_offset<ptr_chain<data_size<0x1CFF0>, 0, 0>, 0x5066A8> unknown21;
-    memory_offset<active_object_state, 0x5163E0> unknown22;
+    memory_offset<ptr_chain<std::array<uint8_t, 0x1CFF0>, 0, 0>, 0x5066A4> unknown20;
+    memory_offset<ptr_chain<std::array<uint8_t, 0x1CFF0>, 0, 0>, 0x5066A8> unknown21;
+    memory_offset<gg_object, 0x5163E0> unknown22;
 
     // Used for validating throw attempt (opponent X axis position?).
     // If it's not stored in game state, then rollback to the first frame
@@ -396,7 +388,7 @@ struct match_state
 
     // test/replays/matches/session4.ggr (synctest 1f)
     // at :base+25C2EA
-    // active_object_state::active_move depends on this
+    // gg_object::active_move depends on this
     memory_offset<uint32_t[0x56], 0x516288> unknown25;
 
     // test/replays/bugrepro/justice_double_nb.ggr
@@ -523,7 +515,7 @@ struct match_state_2
     memory_offset<uint32_t, 0x51B820> effect_data4;
     memory_offset<float, 0x5113B0> effect_data5;
     memory_offset<uint32_t, 0x520DCC> effect_data6;
-    memory_offset<data_size<0x48>, 0x5087A8> effect_data7;
+    memory_offset<std::array<uint8_t, 0x48>, 0x5087A8> effect_data7;
 
     // Address of fiber-local storage index for _tiddata structure.
     // _tiddata contains rand() seed. Kliff's taunt (バカモン) employs
@@ -561,7 +553,7 @@ struct match_state_2
     memory_offset<uint64_t[0x30], 0x511234> overdrive_or_round_end_rng_related3;
     // test/replays/matches/session5.ggr (frame 25089, synctest 1f)
     // at :base+CEBD5
-    ptr_chain<std::array<uint64_t, 0xA>, 0x511658, 0> extra_objects_rng_related1;
+    ptr_chain<std::array<uint64_t, 0xA>, 0x511658, 0> noninteractives_rng_related1;
     // test/replays/matches/session7.ggr (frame 4941, synctest 1f)
     // at :base+CD3D0
     memory_offset<uint32_t, 0x555D8C> round_end_rng_related1;
@@ -634,7 +626,7 @@ typedef void (draw_pressed_buttons_func_t)(
 // displayed buttons will be incorrect.
 // input registers:
 // * ecx: copy of input
-// * edx: active_object_state* for current player
+// * edx: gg_object* for current player
 // output registers:
 // * eax: result
 typedef uint32_t (button_bitmask_to_icon_bitmask_func_t)(uint32_t mode);

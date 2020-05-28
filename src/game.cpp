@@ -187,7 +187,7 @@ void game_tick()
 
 uint32_t button_bitmask_to_icon_bitmask(uint32_t input, const gg_char_state& state)
 {
-    active_object_state state_wrapper;
+    gg_object state_wrapper;
     state_wrapper.char_state_ptr = &state;
     const auto obj = &state_wrapper;
     auto f = g_global_data_orig.button_bitmask_to_icon_bitmask;

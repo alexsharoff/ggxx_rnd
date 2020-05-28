@@ -7,9 +7,9 @@
 #include <string>
 
 
-void object_checksum(Fnv1aHash<>& hash, const active_object_state& obj)
+void object_checksum(Fnv1aHash<>& hash, const gg_object& obj)
 {
-    active_object_state obj_fixed = obj;
+    gg_object obj_fixed = obj;
     // erase palette reset bit, which is manually set during rollback
     obj_fixed.palette_status_bitmask &= ~0x400u;
     hash.add(reinterpret_cast<const uint8_t*>(&obj_fixed), 0x130);
@@ -56,7 +56,7 @@ size_t state_checksum(const game_state& state)
         }
     }
 
-    const auto& noninteractives_ptr = state.match.extra_objects.get().ptr;
+    const auto& noninteractives_ptr = state.match.noninteractives.get().ptr;
     if (noninteractives_ptr.has_value())
     {
         size_t idx = 0;
@@ -112,11 +112,11 @@ size_t state_checksum(const game_state& state)
     return hash.get();
 }
 
-void print_object(const active_object_state& obj, const std::string_view& name = "object")
+void print_object(const gg_object& obj, const std::string_view& name = "object")
 {
     decltype(std::cout)::fmtflags fmtflags_backup(std::cout.flags());
 
-    active_object_state obj_fixed = obj;
+    gg_object obj_fixed = obj;
     // erase palette reset bit, which is manually set during rollback
     obj_fixed.palette_status_bitmask &= ~0x400u;
     std::cout << "  " << name << ':' << std::endl;
@@ -177,7 +177,7 @@ void print_game_state(const game_state& state)
         }
     }
 
-    const auto& noninteractives_ptr = state.match.extra_objects.get().ptr;
+    const auto& noninteractives_ptr = state.match.noninteractives.get().ptr;
     if (noninteractives_ptr.has_value())
     {
         size_t idx = 0;
