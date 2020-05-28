@@ -143,4 +143,34 @@ foreach(synctest_frames 1 2 3 4 5 6 7 8)
         ARGS ${args}
         TIMEOUT 400
     )
+    add_gg_test(
+        NAME 1590687408.ggr.${synctest_frames}f
+        REPLAY matches/1590687408.ggr
+        ARGS ${args}
+        TIMEOUT 600
+    )
+    add_gg_test(
+        NAME 1590687766.ggr.${synctest_frames}f
+        REPLAY matches/1590687766.ggr
+        ARGS ${args}
+        TIMEOUT 600
+    )
+    add_gg_test(
+        NAME 1590688106.ggr.${synctest_frames}f
+        REPLAY matches/1590688106.ggr
+        ARGS ${args}
+        TIMEOUT 600
+    )
+    add_gg_test(
+        NAME 1590688461.ggr.${synctest_frames}f
+        REPLAY matches/1590688461.ggr
+        ARGS ${args}
+        TIMEOUT 600
+    )
+    add_gg_test(
+        NAME 1590690360.ggr.${synctest_frames}f
+        REPLAY matches/1590690360.ggr
+        ARGS ${args}
+        TIMEOUT 600
+    )
 endforeach()
