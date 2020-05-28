@@ -163,6 +163,8 @@ public:
             std::cout << "Timesync: " << event->u.timesync.frames_ahead << " frames ahead" << std::endl;
             m_frames_ahead = event->u.timesync.frames_ahead;
             break;
+        default:
+            assert(0);
         }
         return true;
     }
