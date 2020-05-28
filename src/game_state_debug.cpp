@@ -9,7 +9,10 @@
 
 void object_checksum(Fnv1aHash<>& hash, const active_object_state& obj)
 {
-    hash.add(reinterpret_cast<const uint8_t*>(&obj), 0x130);
+    active_object_state obj_fixed = obj;
+    // erase palette reset bit, which is manually set during rollback
+    obj_fixed.palette_status_bitmask &= ~0x400u;
+    hash.add(reinterpret_cast<const uint8_t*>(&obj_fixed), 0x130);
 }
 
 // TODO: implement proper (mini_reflection::for_each_member)
@@ -113,8 +116,11 @@ void print_object(const active_object_state& obj, const std::string_view& name =
 {
     decltype(std::cout)::fmtflags fmtflags_backup(std::cout.flags());
 
+    active_object_state obj_fixed = obj;
+    // erase palette reset bit, which is manually set during rollback
+    obj_fixed.palette_status_bitmask &= ~0x400u;
     std::cout << "  " << name << ':' << std::endl;
-    auto data = reinterpret_cast<const uint8_t*>(&obj);
+    auto data = reinterpret_cast<const uint8_t*>(&obj_fixed);
     for (size_t i = 0; i < 0x13; ++i)
     {
         std::cout << std::setfill('0') << std::setw(2) << i;
