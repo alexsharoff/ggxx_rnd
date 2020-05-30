@@ -17,6 +17,16 @@
 #include "test.h"
 
 
+// TODO: emulate packet loss, delay, tamper (patch_iat.h)
+// TODO: spectators, connect mid-match
+// TODO: exchange misc data between nodes (desync detection, custom initial game state)
+// TODO: sound effect accounting
+// TODO: estimate ping with peer without opening session
+// TODO: report port in use errors
+// TODO: custom UDP backend or Hole Punching / Relay Node support
+// TODO: how to reproduce desync errors that synctest cannot?
+
+
 #define GGPO_CHECK(expr) \
     do { \
         const auto res___ = expr; \
@@ -347,15 +357,15 @@ void game_loop(TestGame& game, uint32_t fps)
     auto next = high_resolution_clock::now();
     for (;;)
     {
-        if (game.input_ended())
-            break;
         auto now = high_resolution_clock::now();
         const auto ms_left = std::chrono::duration_cast<std::chrono::milliseconds>(next - now).count();
         game.idle(std::max(0ll, ms_left - 1));
         if (now >= next)
         {
+            if (game.input_ended())
+                break;
             game.run_frame();
-            next = now + std::chrono::seconds(1) / fps;
+            next += std::chrono::seconds(1) / fps;
         }
     }
 }
