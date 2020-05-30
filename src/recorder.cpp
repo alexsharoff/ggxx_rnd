@@ -1,6 +1,7 @@
 
 #include "recorder.h"
 
+#include "game_state_debug.h"
 #include "util.h"
 
 #include <algorithm>
@@ -230,40 +231,50 @@ bool read_replay_file(const wchar_t* path, std::wstring& error)
     return true;
 }
 
-std::ofstream g_output_file;
+std::ofstream g_replay_file;
+std::ofstream g_checksum_list_file;
 // call before update_replay_file
 bool open_replay_file(const wchar_t* path, std::wstring& error)
 {
-    g_output_file.open(path, std::ofstream::trunc | std::ofstream::binary);
-    if (!g_output_file.is_open())
+    g_replay_file.open(path, std::ofstream::trunc | std::ofstream::binary);
+    if (!g_replay_file.is_open())
     {
         error = std::wstring(L"Unable to open file: ") + path;
+        return false;
+    }
+    auto path_checksum_list = std::wstring(path);
+    // .ggr => .ggs
+    path_checksum_list = path_checksum_list.substr(0, path_checksum_list.size() - 1) +  + L"s";
+    g_checksum_list_file.open(path_checksum_list, std::ofstream::trunc);
+    if (!g_checksum_list_file.is_open())
+    {
+        error = std::wstring(L"Unable to open file: ") + path_checksum_list;
         return false;
     }
     return true;
 }
 
-bool update_replay_file(std::wstring& error)
+bool update_replay_file(std::wstring& error, IGame* game)
 {
-    g_output_file.seekp(0);
+    g_replay_file.seekp(0);
     replay_header header{};
     header.body_size = 2 * sizeof(size_t) + g_recorder.history.size() * sizeof(IGame::input_t);
     constexpr wchar_t generic_error[] = L"Write operation failed, replay may become corrupted.";
-    if (!g_output_file.write(reinterpret_cast<const char*>(&header), sizeof(header)))
+    if (!g_replay_file.write(reinterpret_cast<const char*>(&header), sizeof(header)))
     {
         error = generic_error;
         return false;
     }
 
     size_t memory_regions_count = 0;
-    if (!g_output_file.write(reinterpret_cast<const char*>(&memory_regions_count), sizeof(memory_regions_count)))
+    if (!g_replay_file.write(reinterpret_cast<const char*>(&memory_regions_count), sizeof(memory_regions_count)))
     {
         error = generic_error;
         return false;
     }
 
     size_t input_count = g_recorder.history.size();
-    if (!g_output_file.write(reinterpret_cast<const char*>(&input_count), sizeof(input_count)))
+    if (!g_replay_file.write(reinterpret_cast<const char*>(&input_count), sizeof(input_count)))
     {
         error = generic_error;
         return false;
@@ -271,12 +282,19 @@ bool update_replay_file(std::wstring& error)
 
     for (size_t i = 0; i < g_recorder.history.size(); ++i)
     {
-        if (!g_output_file.write(reinterpret_cast<const char*>(&g_recorder.history[i]), sizeof(g_recorder.history[i])))
+        if (!g_replay_file.write(reinterpret_cast<const char*>(&g_recorder.history[i]), sizeof(g_recorder.history[i])))
         {
             error = generic_error;
             return false;
         }
     }
+
+    g_checksum_list_file
+        << game->GetState().match2.frame << ':'
+        << state_checksum(game->GetState(), false)
+        << ':' << state_checksum(game->GetState(), true)
+        << std::endl;
+
     return true;
 }
 
@@ -481,7 +499,7 @@ bool input_hook(IGame* game)
                 g_recorder.history.resize(frame + 1);
             g_recorder.history[frame] = input;
             std::wstring error;
-            if (!update_replay_file(error))
+            if (!update_replay_file(error, game))
             {
                 std::wcerr << error.c_str() << std::endl;
             }
