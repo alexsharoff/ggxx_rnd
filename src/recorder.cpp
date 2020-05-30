@@ -507,7 +507,21 @@ bool input_hook(IGame* game)
     }
 
     if (g_frame_advance.history_idx.has_value() || g_recorder.playing)
+    {
+        if (g_cfg->get_args().game_mode == libgg_args::game_mode_t::network)
+        {
+            if (g_cfg->get_args().network.side == 1)
+            {
+                input[1] = 0;
+            }
+            else
+            {
+                std::swap(input[0], input[1]);
+                input[1] = 0;
+            }
+        }
         game->SetInputRemapped(input);
+    }
 
     return true;
 }

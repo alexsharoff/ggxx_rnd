@@ -30,8 +30,8 @@ extern "C" __declspec(dllexport) void libgg_init()
         s_game = IGame::Initialize(image_base, s_cfg.get());
         unattended::Initialize(s_game.get(), s_cfg.get());
         print_state::Initialize(s_game.get(), s_cfg.get());
-        ggpo::Initialize(s_game.get(), s_cfg.get());
         recorder::Initialize(s_game.get(), s_cfg.get());
+        ggpo::Initialize(s_game.get(), s_cfg.get());
         training_mode_ex::Initialize(s_game.get(), s_cfg.get());
         skip_intro::Initialize(s_game.get(), s_cfg.get());
         sound_fix::Initialize(s_game.get(), s_cfg.get());
