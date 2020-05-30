@@ -75,7 +75,7 @@ size_t state_checksum(const game_state& state, bool strict)
             {
                 if (object.id)
                 {
-                    object_checksum(hash, object, false);
+                    object_checksum(hash, object, true);
                     hash.add(idx);
                 }
                 ++idx;
