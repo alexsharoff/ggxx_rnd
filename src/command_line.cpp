@@ -39,7 +39,7 @@ L"Supported arguments:\n"
 "[/help]\n"
 "[<path>.ggr [/record]]\n"
 "[/unattended]\n"
-"[/synctest <frame count>]\n"
+"[/synctest <frame count> [/strict]]\n"
 "[/gamemode {vs2p | training | network}]\n"
 "[/printstate <frame> [<frame> ...]]"
 "[/remoteip <ip or hostname>]\n"
@@ -257,6 +257,7 @@ libgg_args parse_command_line()
                 show_message_box(L"Invalid /synctest value", true);
                 std::exit(1);
             }
+            cmd.synctest_strict = parse_option(args, L"/strict");
         }
 
         integers = parse_integers(args, L"/side", 1);
@@ -294,5 +295,12 @@ libgg_args parse_command_line()
             std::exit(1);
         }
     }
+
+    if (!cmd.replay.has_value())
+    {
+        const auto filename = std::to_wstring(time(0)) + std::to_wstring(::GetCurrentProcessId());
+        cmd.replay = { filename + L".ggr", libgg_args::replay_t::mode_t::record };
+    }
+
     return cmd;
 }

@@ -106,11 +106,13 @@ bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 
     if (g_cfg->get_args().synctest_frames > 0)
     {
-        *checksum = state_checksum(*state_ptr);
+        // strict checksum: checksum that involves noninteractive objects and pointers
+        bool strict = g_cfg->get_args().synctest_strict;
+        *checksum = state_checksum(*state_ptr, strict);
         auto found = g_saved_state_map.find(frame);
         if (found != g_saved_state_map.end())
         {
-            int checksum_old = state_checksum(*found->second);
+            int checksum_old = state_checksum(*found->second, strict);
             if (checksum_old != *checksum)
             {
                 std::cout << "Synctest failed" << std::endl;
@@ -341,12 +343,17 @@ bool input_data_hook(IGame* game)
     if (!g_session)
         return true;
 
+    // timeout argument isn't used for anything useful,
+    // so let's just set it to 0.
+    GGPO_CHECK(ggpo_idle(g_session, 0));
+
     IGame::input_t timesync_input{};
     if (!g_ggpo_frame_advance && g_drawing_enabled)
     {
         limit_fps(game);
         if (g_timesync_frames > 0 && (g_game->GetState().match2.frame.get() % 7 == 0))
         {
+            GGPO_CHECK(ggpo_idle(g_session, 0));
             timesync_input = game->GetInputRemapped();
             limit_fps(game);
             --g_timesync_frames;
@@ -370,8 +377,6 @@ bool input_data_hook(IGame* game)
     if (network_args.side == 2)
         std::swap(input[0], input[1]);
 
-    // timeout argument isn't used for anything useful,
-    // so let's just set it to 0.
     GGPO_CHECK(ggpo_idle(g_session, 0));
 
     const auto frame = g_game->GetState().match2.frame.get() - g_frame_base;

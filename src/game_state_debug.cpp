@@ -7,16 +7,25 @@
 #include <string>
 
 
-void object_checksum(Fnv1aHash<>& hash, const gg_object& obj)
+void object_checksum(Fnv1aHash<>& hash, const gg_object& obj, bool strict)
 {
-    gg_object obj_fixed = obj;
-    // erase palette reset bit, which is manually set during rollback
-    obj_fixed.palette_status_bitmask &= ~0x400u;
-    hash.add(reinterpret_cast<const uint8_t*>(&obj_fixed), 0x130);
+    if (strict)
+    {
+        gg_object obj_fixed = obj;
+        // erase palette reset bit, which is manually set during rollback
+        obj_fixed.palette_status_bitmask &= ~0x400u;
+        hash.add(reinterpret_cast<const uint8_t*>(&obj_fixed), 0x130);
+    }
+    else
+    {
+        hash.add(obj.id).add(obj.owner_id).add(obj.pos_x).add(obj.pos_y);
+        hash.add(obj.side).add(obj.status_bitmask).add(obj.velocity_x);
+        hash.add(obj.velocity_y).add(obj.hitbox_count).add(obj.hitstop_countdown);
+    }
 }
 
 // TODO: implement proper (mini_reflection::for_each_member)
-size_t state_checksum(const game_state& state)
+size_t state_checksum(const game_state& state, bool strict)
 {
     Fnv1aHash hash;
     auto& p1_char_state = state.match.character_state.get()[0];
@@ -24,13 +33,13 @@ size_t state_checksum(const game_state& state)
     const auto& p1 = state.match.p1_character.get().ptr;
     if (p1.has_value())
     {
-        object_checksum(hash, p1.value());
+        object_checksum(hash, p1.value(), strict);
         hash.add(p1_char_state);
     }
     const auto& p2 = state.match.p2_character.get().ptr;
     if (p2.has_value())
     {
-        object_checksum(hash, p2.value());
+        object_checksum(hash, p2.value(), strict);
         hash.add(p2_char_state);
     }
 
@@ -49,27 +58,55 @@ size_t state_checksum(const game_state& state)
         {
             if (object.id)
             {
-                object_checksum(hash, object);
+                object_checksum(hash, object, strict);
                 hash.add(idx);
             }
             ++idx;
         }
     }
 
-    const auto& noninteractives_ptr = state.match.noninteractives.get().ptr;
-    if (noninteractives_ptr.has_value())
+    if (strict)
     {
-        size_t idx = 0;
-        for (const auto& object : *noninteractives_ptr)
+        const auto& noninteractives_ptr = state.match.noninteractives.get().ptr;
+        if (noninteractives_ptr.has_value())
         {
-            if (object.id)
+            size_t idx = 0;
+            for (const auto& object : *noninteractives_ptr)
             {
-                object_checksum(hash, object);
-                hash.add(idx);
+                if (object.id)
+                {
+                    object_checksum(hash, object, false);
+                    hash.add(idx);
+                }
+                ++idx;
             }
-            ++idx;
+        }
+
+        uint32_t next_fiber_id = static_cast<uint32_t>(state.match2.next_fiber_id.get());
+        hash.add(next_fiber_id);
+        for (const auto& f : state.match2.menu_fibers.get())
+        {
+            hash.add(f.status);
+            if (f.status)
+                hash.add(reinterpret_cast<const uint8_t*>(f.name), sizeof(f.name));
+        }
+
+        if (!state.fibers.empty())
+        {
+            hash.add(state.fiber_state.stage_select_controller.get());
+            hash.add(state.fiber_state.random_stage_sequence.get()[0]);
+            hash.add(state.fiber_state.random_char_sequence.get()[0]);
         }
     }
+
+    hash.add(state.match2.rand_seed);
+    hash.add(state.match2.selected_bgm.get());
+    hash.add(state.match2.selected_stage.get());
+    hash.add(state.match2.p1_rounds_won.get());
+    hash.add(state.match2.p2_rounds_won.get());
+    hash.add(state.match2.round_end_bitmask.get());
+    hash.add(state.match2.match_countdown.get());
+    hash.add(state.match2.round_state.get());
 
     const auto& data = state.match.data.get();
     hash.add(data.selected_palette[0]);
@@ -79,56 +116,31 @@ size_t state_checksum(const game_state& state)
     hash.add(data.winner);
     hash.add(data.winstreak);
 
-    uint32_t next_fiber_id = static_cast<uint32_t>(state.match2.next_fiber_id.get());
-    hash.add(next_fiber_id);
-    for (const auto& f : state.match2.menu_fibers.get())
-    {
-        hash.add(f.status);
-        if (f.status)
-            hash.add(reinterpret_cast<const uint8_t*>(f.name), sizeof(f.name));
-    }
-
-    if (!state.fibers.empty())
-    {
-        hash.add(state.fiber_state.stage_select_controller.get());
-        hash.add(state.fiber_state.random_stage_sequence.get()[0]);
-        hash.add(state.fiber_state.random_char_sequence.get()[0]);
-    }
-
     const auto& rng1 = state.match2.rng1.get();
-    const auto& rng2 = state.match2.rng2.get();
-    hash.add(state.match2.rand_seed);
-    hash.add(state.match2.selected_bgm.get());
-    hash.add(state.match2.selected_stage.get());
-    hash.add(state.match2.p1_rounds_won.get());
-    hash.add(state.match2.p2_rounds_won.get());
-    hash.add(state.match2.round_end_bitmask.get());
-    hash.add(state.match2.match_countdown.get());
-    hash.add(state.match2.round_state.get());
     hash.add(rng1.index);
     hash.add(rng1.data[rng1.index]);
+
+    const auto& rng2 = state.match2.rng2.get();
     hash.add(rng2.index);
     hash.add(rng2.data[rng2.index]);
+
     return hash.get();
 }
 
-void print_object(const gg_object& obj, const std::string_view& name = "object")
+void print_hex_data(const uint8_t* data, size_t len)
 {
     decltype(std::cout)::fmtflags fmtflags_backup(std::cout.flags());
 
-    gg_object obj_fixed = obj;
-    // erase palette reset bit, which is manually set during rollback
-    obj_fixed.palette_status_bitmask &= ~0x400u;
-    std::cout << "  " << name << ':' << std::endl;
-    auto data = reinterpret_cast<const uint8_t*>(&obj_fixed);
-    for (size_t i = 0; i < 0x13; ++i)
+    const size_t bytes_per_row = 16;
+    const auto max_i = static_cast<size_t>(std::ceil(double(len) / bytes_per_row));
+    for (size_t i = 0; i < max_i; ++i)
     {
         std::cout << std::setfill('0') << std::setw(2) << i;
-        for (size_t j = 0; j < 16; ++j)
+        for (size_t j = 0; j < bytes_per_row && i * bytes_per_row + j < len; ++j)
         {
             if (j % 4 == 0)
                 std::cout << ' ';
-            std::cout << std::setfill('0') << std::setw(2) << std::hex << (int)data[i * 16 + j];
+            std::cout << std::setfill('0') << std::setw(2) << std::hex << (int)data[i * bytes_per_row + j];
         }
         std::cout << std::endl;
     }
@@ -136,20 +148,29 @@ void print_object(const gg_object& obj, const std::string_view& name = "object")
     std::cout.flags(fmtflags_backup);
 }
 
-void print_object(const gg_char_state& obj, const std::string_view& name = "char")
+template<class T>
+void print_object(const T& obj, const std::string_view& name)
 {
-    std::cout
-        << "  " << name << ':' << std::endl
-        << "    stun_accumulator=" << obj.stun_accumulator << std::endl
-        << "    faint_countdown=" << obj.faint_countdown << std::endl
-        << "    tension=" << obj.tension << std::endl
-        << "    guard=" << obj.guard << std::endl
-        << "    burst=" << obj.burst << std::endl;
+    std::cout << "  " << name << ':' << std::endl;
+    print_hex_data(reinterpret_cast<const uint8_t*>(&obj), sizeof(obj));
+}
+
+template<>
+void print_object(const gg_object& obj, const std::string_view& name)
+{
+    gg_object obj_fixed = obj;
+    // erase palette reset bit, which is manually set during rollback
+    obj_fixed.palette_status_bitmask &= ~0x400u;
+    std::cout << "  " << name << ':' << std::endl;
+    auto data = reinterpret_cast<const uint8_t*>(&obj_fixed);
+    print_hex_data(data, 0x130);
 }
 
 void print_game_state(const game_state& state)
 {
     std::cout << "frame=" << state.match2.frame.get() << std::endl;
+    std::cout << "  checksum=" << state_checksum(state, false) << std::endl;
+    std::cout << "  checksum_strict=" << state_checksum(state, true) << std::endl;
     auto& p1_char_state = state.match.character_state.get()[0];
     auto& p2_char_state = state.match.character_state.get()[1];
     const auto& p1 = state.match.p1_character.get().ptr;

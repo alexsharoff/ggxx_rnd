@@ -127,13 +127,6 @@ struct gg_char_state
 
 static_assert(sizeof(gg_char_state) == 0x148);
 
-struct player_button_timers
-{
-    // Doesn't contain any pointers
-    // TODO: elaborate later
-    char data[100];
-};
-
 struct player_direction_timers
 {
     uint32_t timers[2];
@@ -282,7 +275,7 @@ struct match_state
 {
     memory_offset<gg_char_state[2], 0x51A038> character_state;
     memory_offset<camera_state, 0x51B0D4> camera_state;
-    memory_offset<player_button_timers, 0x516010> player_button_timers;
+    memory_offset<uint16_t[10], 0x51605c> player_button_timers;
     memory_offset<player_direction_timers, 0x5161f8> player_direction_timers;
     memory_offset<player_controller_state[2], 0x516294> player_controller_state;
     #pragma pack(push, 1)
@@ -368,10 +361,6 @@ struct match_state
     memory_offset<uint32_t, 0x5561A8> unknown15;
     memory_offset<gg_object, 0x517A78> unknown16;
     memory_offset<uint8_t[0x2800], 0x5489F8> unknown17;
-    memory_offset<uint8_t[0x2800], 0x54B198> unknown18;
-    memory_offset<uint8_t[0x54], 0x506690> unknown19;
-    memory_offset<ptr_chain<std::array<uint8_t, 0x1CFF0>, 0, 0>, 0x5066A4> unknown20;
-    memory_offset<ptr_chain<std::array<uint8_t, 0x1CFF0>, 0, 0>, 0x5066A8> unknown21;
     memory_offset<gg_object, 0x5163E0> unknown22;
 
     // Used for validating throw attempt (opponent X axis position?).
@@ -395,6 +384,26 @@ struct match_state
     // at :base+66B35
     // rng desync after two NBs hit at the same time
     memory_offset<uint32_t, 0x517CDC> unknown26;
+
+    // test/replays/matches/1590687408.ggr (synctest 1f, frame 2027)
+    // at :base+70F10
+    memory_offset<uint32_t[8], 0x516178> unknown27;
+
+    // test/replays/matches/1590687766.ggr (synctest 1f, frame 1537)
+    // at :base+BDCF5
+    // actual size seems to be 81800, because it's a copy of :base+54B208
+    // (see comment in struct memory_regions)
+    ptr_chain<std::array<uint32_t, 0x10>, 0x5118D0, 0> unknown28;
+
+    // test/replays/matches/1590688106.ggr (synctest 1f, frame 16661)
+    // at :base+55272
+    // something regarding air throw
+    memory_offset<uint32_t[2], 0x51B778> unknown29;
+
+    // test/replays/matches/1590688106.ggr (synctest 1f, frame 16661)
+    // at :base+59692
+    // not sure if this is needed
+    memory_offset<uint32_t, 0x51B17C> unknown30;
 };
 
 static_assert(sizeof(player_controller_state) == 152);

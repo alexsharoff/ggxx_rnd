@@ -21,6 +21,7 @@ struct libgg_args
     std::optional<replay_t> replay;
     bool unattended = false;
     int synctest_frames = 0;
+    bool synctest_strict = false;
     enum class game_mode_t : uint8_t
     {
         vs2p = 1,
