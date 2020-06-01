@@ -157,10 +157,13 @@ public:
         }
         else
         {
+            auto ratio = m_fps / 60;
+            if (ratio == 0)
+                ratio = 1;
             auto last_timestamp = m_fps_timestamps[(m_fps_timestamp_idx - 1) & 0x1f];
             auto first_timestamp = m_fps_timestamps[(m_fps_timestamp_idx) & 0x1f];
             return static_cast<uint32_t>(
-                std::round(double(1000000 * (m_fps_timestamps.size() - 1)) / (last_timestamp - first_timestamp))
+                std::round(double(1000000 * (m_fps_timestamps.size() - 1) * ratio) / (last_timestamp - first_timestamp))
             );
         }
     }
@@ -256,13 +259,17 @@ public:
 
     void UpdateFpsTimestamps()
     {
-        using std::chrono::time_point_cast;
-        using std::chrono::microseconds;
-        using std::chrono::high_resolution_clock;
-        auto mcs = time_point_cast<microseconds>(high_resolution_clock::now()).time_since_epoch().count();
-        m_fps_timestamps[m_fps_timestamp_idx++ & 0x1f] = mcs;
-        if (m_fps_timestamp_idx == 0x40)
-            m_fps_timestamp_idx = 0x20;
+        auto ratio = m_fps / 60;
+        if (!ratio || GetState().match.frame % ratio == 0)
+        {
+            using std::chrono::time_point_cast;
+            using std::chrono::microseconds;
+            using std::chrono::high_resolution_clock;
+            auto mcs = time_point_cast<microseconds>(high_resolution_clock::now()).time_since_epoch().count();
+            m_fps_timestamps[m_fps_timestamp_idx++ & 0x1f] = mcs;
+            if (m_fps_timestamp_idx == 0x40)
+                m_fps_timestamp_idx = 0x20;
+        }
     }
 
     void ProcessAudio() final

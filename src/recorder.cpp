@@ -301,7 +301,7 @@ bool before_draw_frame(IGame* game)
     if (g_frame_advance.expected_fps != 60)
     {
         auto ratio = g_frame_advance.expected_fps / 60;
-        if (ratio > 1 && game->GetState().match.frame % (ratio + 1) > 1)
+        if (ratio > 1 && game->GetState().match.frame % ratio != 0)
             return false;
     }
     return true;
@@ -372,9 +372,28 @@ bool input_hook(IGame* game)
         else if (!(g_prev_action & action::frame_next) && !!(action & action::frame_next))
         {
             if (g_frame_advance.expected_fps >= 60)
+            {
                 g_frame_advance.expected_fps = (g_frame_advance.expected_fps / 60 + 1) * 60;
+            }
             else
-                g_frame_advance.expected_fps *= 2;
+            {
+                if (g_frame_advance.expected_fps == 1)
+                {
+                    g_frame_advance.expected_fps = 3;
+                }
+                else if (g_frame_advance.expected_fps == 3)
+                {
+                    g_frame_advance.expected_fps = 7;
+                }
+                else if (g_frame_advance.expected_fps == 7)
+                {
+                    g_frame_advance.expected_fps = 15;
+                }
+                else
+                {
+                    g_frame_advance.expected_fps *= 2;
+                }
+            }
             if (g_frame_advance.expected_fps >= 1000)
                 g_frame_advance.expected_fps = 960;
             game->SetFpsLimit(g_frame_advance.expected_fps);
@@ -557,6 +576,20 @@ bool process_objects_hook(IGame* game)
     if (g_frame_advance.out_of_memory)
     {
         game->WriteCockpitFont("OUT OF MEMORY!", 230, 440, 1, 0xff, 1);
+    }
+
+    if (g_frame_advance.expected_fps != 60)
+    {
+        std::string speed_status;
+        if (g_frame_advance.expected_fps > 60)
+        {
+            speed_status = "SPEED X" + std::to_string(g_frame_advance.expected_fps / 60);
+        }
+        else
+        {
+            speed_status = "SPEED /" + std::to_string(60 / g_frame_advance.expected_fps);
+        }
+        game->WriteCockpitFont(speed_status.c_str(), 270, 440, 1, 0xff, 1);
     }
 
     return true;
