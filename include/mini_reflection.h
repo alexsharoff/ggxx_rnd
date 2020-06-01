@@ -6,49 +6,6 @@
 #include <tuple>
 
 
-
-// tag storage: std::unordered_set<std::type_index> tags;
-// tags.insert(std::type_index{typeid(mytype)});
-// kv storage: std::unordered_map<std::type_index, std::any>;
-// tags[std::type_index(typeid(mytype))] = something{};
-
-/*template<>
-struct reflect<gg_state>
-{
-	constexpr static auto members = member_tuple(
-		// tags: name, members, etc
-		&gg_state::get_input_data, tag<rel_ptr>(), tag<offset>(0x5263d + 1),
-		&gg_state::fps_limit, tag<rel_ptr>(),
-		&gg_state::game_tick, tag<rel_ptr>(),
-		&gg_state::sleep_ptr, tags<a, b, c>(),
-		&gg_state::play_sound, tags<a, b, c>(val1, val2, val3)
-	);
-};*/
-
-
-// TODO: make member_tuple with multiple array<>s or self<>s invalid
-// 
-// reflection<T>
-// {
-//     constexpr static impl = reflection<BaseT>::impl + member_tuple(A::b, "a") + method_tuple(A::m, "m") + other_tags(...) 
-// }
-// 
-// each reflection 'property' is a 'tag':
-// * get_tag<T, member_tuple_t>::value
-// * has_tag<T, internal_t>::value
-// 
-// struct A: reflection_base<A>
-// {};
-// A a;
-// a.has_member("abc");
-// a.has_member<T1, T2>("abc");
-// a.class_name();
-// reflection_base& o = a;
-// std::any res = o.call("method", 1, 2, "str");
-// std::any value = o.get("member");
-// 
-// try to remove self<> & array<> ?
-
 namespace mini_reflection
 {
 

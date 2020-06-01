@@ -7,6 +7,17 @@
 namespace unattended
 {
 
+namespace
+{
+
+bool before_draw_frame(IGame*)
+{
+    // don't draw current frame
+    return false;
+}
+
+}
+
 void Initialize(IGame* game, configuration* cfg)
 {
     if (cfg->get_args().unattended)
@@ -17,9 +28,7 @@ void Initialize(IGame* game, configuration* cfg)
         constexpr uint8_t showwindow_cmd = SW_SHOWMINNOACTIVE;
         memory_dump::dump(showwindow_cmd, game->GetImageBase() + 0x1473B6);
 
-        game->EnableDrawing(false);
-
-        // TODO: disable sound
+        game->RegisterCallback(IGame::Event::BeforeDrawFrame, before_draw_frame);
     }
 }
 

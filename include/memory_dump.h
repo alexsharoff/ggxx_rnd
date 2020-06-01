@@ -427,9 +427,6 @@ struct loader
         size_t base = addr_m;
         (*this)(ptr, self<offset_t>{}, addr_o, addr_m);
         o.set(base, ptr);
-        /*T value;
-        for_each_member_addr(value, *this, ptr_val);
-        o.reset(value, ptr_offset);*/
     }
 
     template<class T, size_t N>

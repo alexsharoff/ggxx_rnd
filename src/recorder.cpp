@@ -58,9 +58,7 @@ struct frame_advance_data
     uint16_t speed_control_counter = 0;
     bool out_of_memory = false;
     IGame::input_t prev_input;
-    std::optional<bool> fps_limit;
-    std::optional<bool> drawing_enabled;
-    std::optional<time_t> fast_forward_start_time;
+    uint32_t expected_fps = 60;
 } g_frame_advance;
 
 struct recorder_data
@@ -290,7 +288,7 @@ bool update_replay_file(std::wstring& error, IGame* game)
     }
 
     g_checksum_list_file
-        << game->GetState().match2.frame << ':'
+        << game->GetState().match.frame << ':'
         << state_checksum(game->GetState(), false)
         << ':' << state_checksum(game->GetState(), true)
         << std::endl;
@@ -298,19 +296,30 @@ bool update_replay_file(std::wstring& error, IGame* game)
     return true;
 }
 
+bool before_draw_frame(IGame* game)
+{
+    if (g_frame_advance.expected_fps != 60)
+    {
+        auto ratio = g_frame_advance.expected_fps / 60;
+        if (ratio > 1 && game->GetState().match.frame % (ratio + 1) > 1)
+            return false;
+    }
+    return true;
+}
+
 // TODO: this function is kind of a mess, split/simplify
 bool input_hook(IGame* game)
 {
     if (!g_recorder.initial_frame.has_value())
-        g_recorder.initial_frame = game->GetState().match2.frame.get();
+        g_recorder.initial_frame = game->GetState().match.frame.get();
 
-    auto input = game->GetInputRemapped();
+    auto input = game->RemapInputToDefault(game->GetCachedInput());
 
     // Replay logic:
     {
         if (g_recorder.playing)
         {
-            const auto frame = game->GetState().match2.frame.get() - *g_recorder.initial_frame;
+            const auto frame = game->GetState().match.frame.get() - *g_recorder.initial_frame;
             if (frame < g_recorder.history.size())
                 input = g_recorder.history[frame];
         }
@@ -339,14 +348,12 @@ bool input_hook(IGame* game)
             g_frame_advance.out_of_memory = false;
         }
 
-        bool speed_control_enabled = false;
         if (g_frame_advance.history_idx.has_value())
         {
             const bool backward = !!(action & action::frame_prev);
             const bool forward = !!(action & action::frame_next);
             if (backward || forward)
             {
-                speed_control_enabled = true;
                 if (forward && (!(g_prev_action & action::frame_next) || g_frame_advance.speed_control_counter > 60))
                     g_frame_advance.speed = 1;
                 else if (backward && (!(g_prev_action & action::frame_prev) || g_frame_advance.speed_control_counter > 60))
@@ -356,44 +363,31 @@ bool input_hook(IGame* game)
                 if (g_frame_advance.speed_control_counter > 0 || !(g_prev_action & action::frame_next))
                     ++g_frame_advance.speed_control_counter;
             }
-        }
-        else if (!!(action & action::frame_next))
-        {
-            if (!g_frame_advance.fps_limit.has_value())
+            else
             {
-                g_frame_advance.fps_limit = game->IsFpsLimitEnabled();
-                game->EnableFpsLimit(false);
-            }
-            if (!g_frame_advance.fast_forward_start_time.has_value())
-            {
-                g_frame_advance.fast_forward_start_time = ::time(0);
-            }
-            else if (::time(0) - *g_frame_advance.fast_forward_start_time > 2 && !g_frame_advance.drawing_enabled.has_value())
-            {
-                g_frame_advance.drawing_enabled = game->IsDrawingEnabled();
-                game->EnableDrawing(false);
+                g_frame_advance.speed = 0;
+                g_frame_advance.speed_control_counter = 0;
             }
         }
-
-        if (g_frame_advance.fps_limit.has_value() && (g_frame_advance.drawing_enabled.has_value() || !(action & action::frame_next) || g_frame_advance.history_idx.has_value()))
+        else if (!(g_prev_action & action::frame_next) && !!(action & action::frame_next))
         {
-            game->EnableFpsLimit(*g_frame_advance.fps_limit);
-            g_frame_advance.fps_limit = std::nullopt;
+            if (g_frame_advance.expected_fps >= 60)
+                g_frame_advance.expected_fps = (g_frame_advance.expected_fps / 60 + 1) * 60;
+            else
+                g_frame_advance.expected_fps *= 2;
+            if (g_frame_advance.expected_fps >= 1000)
+                g_frame_advance.expected_fps = 960;
+            game->SetFpsLimit(g_frame_advance.expected_fps);
         }
-
-        if (!(action & action::frame_next))
-            g_frame_advance.fast_forward_start_time = std::nullopt;
-
-        if (g_frame_advance.drawing_enabled.has_value() && (!(action & action::frame_next) || g_frame_advance.history_idx.has_value()))
+        else if (!(g_prev_action & action::frame_prev) && !!(action & action::frame_prev))
         {
-            game->EnableDrawing(*g_frame_advance.drawing_enabled);
-            g_frame_advance.drawing_enabled = std::nullopt;
-        }
-
-        if (!speed_control_enabled)
-        {
-            g_frame_advance.speed = g_frame_advance.history_idx.has_value() ? 0 : 1;
-            g_frame_advance.speed_control_counter = 0;
+            if (g_frame_advance.expected_fps > 60)
+                g_frame_advance.expected_fps = (g_frame_advance.expected_fps / 60 - 1) * 60;
+            else
+                g_frame_advance.expected_fps /= 2;
+            if (g_frame_advance.expected_fps == 0)
+                g_frame_advance.expected_fps = 1;
+            game->SetFpsLimit(g_frame_advance.expected_fps);
         }
 
         std::optional<decltype(input)> saved_input;
@@ -474,7 +468,7 @@ bool input_hook(IGame* game)
     {
         if (g_recorder.playing)
         {
-            const auto frame = game->GetState().match2.frame.get() - *g_recorder.initial_frame;
+            const auto frame = game->GetState().match.frame.get() - *g_recorder.initial_frame;
             if (frame >= g_recorder.history.size())
             {
                 if (g_cfg->get_args().replay->mode == libgg_args::replay_t::mode_t::play)
@@ -494,7 +488,7 @@ bool input_hook(IGame* game)
         }
         if (g_recorder.recording)
         {
-            const auto frame = game->GetState().match2.frame.get() - *g_recorder.initial_frame;
+            const auto frame = game->GetState().match.frame.get() - *g_recorder.initial_frame;
             if (g_recorder.history.size() <= frame)
                 g_recorder.history.resize(frame + 1);
             g_recorder.history[frame] = input;
@@ -520,7 +514,7 @@ bool input_hook(IGame* game)
                 input[1] = 0;
             }
         }
-        game->SetInputRemapped(input);
+        game->SetCachedInput(game->RemapInputFromDefault(input));
     }
 
     return true;
@@ -547,7 +541,7 @@ bool process_objects_hook(IGame* game)
             game->DrawPressedButtons(input, player_state, 490, 300);
         }
 
-        const auto frame = game->GetState().match2.frame.get();
+        const auto frame = game->GetState().match.frame.get();
         auto str = "FRAME " + std::to_string(frame);
         game->WriteCockpitFont(str.c_str(), 275, 440, 1, 0xFF, 1);
     }
@@ -605,8 +599,9 @@ void Initialize(IGame* game, configuration* cfg)
         }
     }
 
-    game->RegisterCallback(IGame::Event::AfterGetInput, input_hook);
-    game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
+    game->RegisterCallback(IGame::Event::AfterReadInput, input_hook);
+    game->RegisterCallback(IGame::Event::AfterAdvanceFrame, process_objects_hook);
+    game->RegisterCallback(IGame::Event::BeforeDrawFrame, before_draw_frame);
 }
 
 }

@@ -33,7 +33,7 @@ bool play_sound_hook(IGame* game)
     if (g_cfg->get_args().unattended)
         return false;
 
-    const auto frame = game->GetState().match2.frame.get();
+    const auto frame = game->GetState().match.frame.get();
     const auto& sound_id = game->GetCurrentSound();
     auto [_, success] = g_heard_sounds[frame].insert(sound_id);
     if (success)

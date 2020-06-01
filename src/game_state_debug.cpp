@@ -82,9 +82,9 @@ size_t state_checksum(const game_state& state, bool strict)
             }
         }
 
-        uint32_t next_fiber_id = static_cast<uint32_t>(state.match2.next_fiber_id.get());
+        uint32_t next_fiber_id = static_cast<uint32_t>(state.match.next_fiber_id.get());
         hash.add(next_fiber_id);
-        for (const auto& f : state.match2.menu_fibers.get())
+        for (const auto& f : state.match.menu_fibers.get())
         {
             hash.add(f.status);
             if (f.status)
@@ -99,14 +99,14 @@ size_t state_checksum(const game_state& state, bool strict)
         }
     }
 
-    hash.add(state.match2.rand_seed);
-    hash.add(state.match2.selected_bgm.get());
-    hash.add(state.match2.selected_stage.get());
-    hash.add(state.match2.p1_rounds_won.get());
-    hash.add(state.match2.p2_rounds_won.get());
-    hash.add(state.match2.round_end_bitmask.get());
-    hash.add(state.match2.match_countdown.get());
-    hash.add(state.match2.round_state.get());
+    hash.add(state.match.rand_seed);
+    hash.add(state.match.selected_bgm.get());
+    hash.add(state.match.selected_stage.get());
+    hash.add(state.match.p1_rounds_won.get());
+    hash.add(state.match.p2_rounds_won.get());
+    hash.add(state.match.round_end_bitmask.get());
+    hash.add(state.match.match_countdown.get());
+    hash.add(state.match.round_state.get());
 
     const auto& data = state.match.data.get();
     hash.add(data.selected_palette[0]);
@@ -116,11 +116,11 @@ size_t state_checksum(const game_state& state, bool strict)
     hash.add(data.winner);
     hash.add(data.winstreak);
 
-    const auto& rng1 = state.match2.rng1.get();
+    const auto& rng1 = state.match.rng1.get();
     hash.add(rng1.index);
     hash.add(rng1.data[rng1.index]);
 
-    const auto& rng2 = state.match2.rng2.get();
+    const auto& rng2 = state.match.rng2.get();
     hash.add(rng2.index);
     hash.add(rng2.data[rng2.index]);
 
@@ -168,7 +168,7 @@ void print_object(const gg_object& obj, const std::string_view& name)
 
 void print_game_state(const game_state& state)
 {
-    std::cout << "frame=" << state.match2.frame.get() << std::endl;
+    std::cout << "frame=" << state.match.frame.get() << std::endl;
     std::cout << "  checksum=" << state_checksum(state, false) << std::endl;
     std::cout << "  checksum_strict=" << state_checksum(state, true) << std::endl;
     auto& p1_char_state = state.match.character_state.get()[0];
@@ -210,8 +210,8 @@ void print_game_state(const game_state& state)
         }
     }
 
-    std::cout << "  next_fiber_id=" << (uint32_t)state.match2.next_fiber_id.get() << std::endl;
-    for (const auto& f : state.match2.menu_fibers.get())
+    std::cout << "  next_fiber_id=" << (uint32_t)state.match.next_fiber_id.get() << std::endl;
+    for (const auto& f : state.match.menu_fibers.get())
     {
         if (f.status)
             std::cout << "  fiber=" << f.name << ':' << f.status << std::endl;
@@ -224,17 +224,17 @@ void print_game_state(const game_state& state)
             << "  random_char_sequence[0]=" << state.fiber_state.random_char_sequence.get()[0] << std::endl;
     }
 
-    const auto& rng1 = state.match2.rng1.get();
-    const auto& rng2 = state.match2.rng2.get();
+    const auto& rng1 = state.match.rng1.get();
+    const auto& rng2 = state.match.rng2.get();
     const auto& data = state.match.data.get();
     std::cout
-        << "  rand() seed=" << state.match2.rand_seed << std::endl
+        << "  rand() seed=" << state.match.rand_seed << std::endl
         << "  rng1.index=" << rng1.index << std::endl
         << "  rng1.value=" << rng1.data[rng1.index] << std::endl
         << "  rng2.index=" << rng2.index << std::endl
         << "  rng2.value=" << rng2.data[rng2.index] << std::endl
-        << "  selected_stage=" << state.match2.selected_stage.get() << std::endl
-        << "  selected_bgm=" << state.match2.selected_bgm.get() << std::endl
+        << "  selected_stage=" << state.match.selected_stage.get() << std::endl
+        << "  selected_bgm=" << state.match.selected_bgm.get() << std::endl
         << "  char_mode_ex[0]=" << state.match.char_mode_ex.get()[0] << std::endl
         << "  char_mode_ex[1]=" << state.match.char_mode_ex.get()[1] << std::endl
         << "  char_mode_sp[0]=" << state.match.char_mode_sp.get()[0] << std::endl
@@ -247,9 +247,9 @@ void print_game_state(const game_state& state)
         << "  selected_char[1]=" << data.selected_char[1] << std::endl
         << "  winner=" << data.winner << std::endl
         << "  winstreak=" << data.winstreak << std::endl
-        << "  p1_rounds_won=" << (int)state.match2.p1_rounds_won.get() << std::endl
-        << "  p2_rounds_won=" << (int)state.match2.p2_rounds_won.get() << std::endl
-        << "  match_countdown=" << state.match2.match_countdown.get() << std::endl
-        << "  round_end_bitmask=" << state.match2.round_end_bitmask.get() << std::endl
-        << "  round_state=" << state.match2.round_state.get() << std::endl;
+        << "  p1_rounds_won=" << (int)state.match.p1_rounds_won.get() << std::endl
+        << "  p2_rounds_won=" << (int)state.match.p2_rounds_won.get() << std::endl
+        << "  match_countdown=" << state.match.match_countdown.get() << std::endl
+        << "  round_end_bitmask=" << state.match.round_end_bitmask.get() << std::endl
+        << "  round_state=" << state.match.round_state.get() << std::endl;
 }

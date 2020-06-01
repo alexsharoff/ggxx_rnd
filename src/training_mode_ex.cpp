@@ -77,7 +77,7 @@ bool process_objects_hook(IGame* game)
 
 void Initialize(IGame* game, configuration*)
 {
-    game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
+    game->RegisterCallback(IGame::Event::AfterAdvanceFrame, process_objects_hook);
 }
 
 }

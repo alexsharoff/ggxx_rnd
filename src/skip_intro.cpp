@@ -36,7 +36,7 @@ bool get_input_hook(IGame* game)
 {
     if (!g_user_control)
     {
-        game->SetInput(IGame::input_t{});
+        game->SetCachedInput(IGame::input_t{});
         // remaining callbacks should be skipped
         return false;
     }
@@ -53,17 +53,17 @@ bool game_tick_hook(IGame* game)
 
     if (g_settings.enabled)
     {
-        const auto frame = game->GetState().match2.frame.get();
+        const auto frame = game->GetState().match.frame.get();
         if (!skip_frame.has_value() || skip_frame == frame)
         {
-            const auto& next_fiber = game->GetState().match2.next_fiber_id.get();
+            const auto& next_fiber = game->GetState().match.next_fiber_id.get();
             if (next_fiber == fiber_id::title)
             {
                 auto state = game->GetState();
-                state.match2.main_menu_idx = g_settings.menu_idx;
+                state.match.main_menu_idx = g_settings.menu_idx;
                 if (g_enter_menu)
                     enter_menu_automatically(game->GetImageBase());
-                state.match2.next_fiber_id = fiber_id::main_menu;
+                state.match.next_fiber_id = fiber_id::main_menu;
                 game->SetState(state);
                 skip_frame = frame;
             }
@@ -71,7 +71,7 @@ bool game_tick_hook(IGame* game)
         else if (g_settings.enabled && game->FindFiberByName("OPTION"))
         {
             // TODO: set menu_idx, save skip_intro_settings o file
-            //cfg.menu_idx = (uint8_t)game->GetState().match2.main_menu_idx.get();
+            //cfg.menu_idx = (uint8_t)game->GetState().match.main_menu_idx.get();
         }
     }
 
@@ -96,8 +96,8 @@ void Initialize(IGame* game, configuration* cfg)
         else if (args.game_mode == libgg_args::game_mode_t::vs2p)
             g_settings.menu_idx = 2;
     }
-    game->RegisterCallback(IGame::Event::AfterGetInput, get_input_hook);
-    game->RegisterCallback(IGame::Event::BeforeGameTick, game_tick_hook);
+    game->RegisterCallback(IGame::Event::AfterReadInput, get_input_hook);
+    game->RegisterCallback(IGame::Event::BeforeAdvanceFrame, game_tick_hook);
 }
 
 }

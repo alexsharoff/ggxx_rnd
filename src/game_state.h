@@ -271,7 +271,7 @@ enum class fiber_id : uint32_t
     match = 6
 };
 
-struct match_state
+struct _match_state_1
 {
     memory_offset<gg_char_state[2], 0x51A038> character_state;
     memory_offset<camera_state, 0x51B0D4> camera_state;
@@ -343,143 +343,13 @@ struct match_state
     memory_offset<uint32_t, 0x5560A0> graphics18;
     memory_offset<uint8_t[0x1348], 0x548A00> graphics19;
     memory_offset<uint8_t[0x1CFC], 0x54B200> graphics20;
-    
-    // TODO: remove as much as possible of these 'unknown' values in the future
-    memory_offset<uint32_t, 0x3E37FC> unknown1;
-    memory_offset<uint32_t, 0x4F80E4> unknown2;
-    memory_offset<uint32_t, 0x5113B4> unknown3;
-    memory_offset<gg_object, 0x517BA8> unknown4;
-    memory_offset<uint32_t, 0x51B798> unknown5;
-    memory_offset<uint32_t, 0x51B7A4> unknown6;
-    memory_offset<uint32_t, 0x51B9DC> unknown8;
-    memory_offset<uint32_t, 0x51EDD4> unknown9;
-    memory_offset<uint32_t, 0x51EE6C> unknown10;
-    memory_offset<uint32_t, 0x51EF04> unknown11;
-    memory_offset<uint32_t, 0x51EF9C> unknown12;
-    memory_offset<uint32_t, 0x555D28> unknown13;
-    memory_offset<uint32_t, 0x55602C> unknown14;
-    memory_offset<uint32_t, 0x5561A8> unknown15;
-    memory_offset<gg_object, 0x517A78> unknown16;
-    memory_offset<uint8_t[0x2800], 0x5489F8> unknown17;
-    memory_offset<gg_object, 0x5163E0> unknown22;
-
-    // Used for validating throw attempt (opponent X axis position?).
-    // If it's not stored in game state, then rollback to the first frame
-    // of throws that put opponent far away (Kliff) will result in a hit
-    // instead of throw.
-    // test: test/replays/bugrepro/kliff_throw.ggr
-    memory_offset<uint32_t, 0x51B78C> unknown23;
-
-    // When a clash happens, this address is used as a condition
-    // for some calculations involving RNG (:base+6404A)
-    // test: test/replays/bugrepro/clash.ggr
-    memory_offset<uint32_t, 0x51B0CC> unknown24;
-
-    // test/replays/matches/session4.ggr (synctest 1f)
-    // at :base+25C2EA
-    // gg_object::active_move depends on this
-    memory_offset<uint32_t[0x56], 0x516288> unknown25;
-
-    // test/replays/bugrepro/justice_double_nb.ggr
-    // at :base+66B35
-    // rng desync after two NBs hit at the same time
-    memory_offset<uint32_t, 0x517CDC> unknown26;
-
-    // test/replays/matches/1590687408.ggr (synctest 1f, frame 2027)
-    // at :base+70F10
-    memory_offset<uint32_t[8], 0x516178> unknown27;
-
-    // test/replays/matches/1590687766.ggr (synctest 1f, frame 1537)
-    // at :base+BDCF5
-    // actual size seems to be 81800, because it's a copy of :base+54B208
-    // (see comment in struct memory_regions)
-    ptr_chain<std::array<uint32_t, 0x10>, 0x5118D0, 0> unknown28;
-
-    // test/replays/matches/1590688106.ggr (synctest 1f, frame 16661)
-    // at :base+55272
-    // something regarding air throw
-    memory_offset<uint32_t[2], 0x51B778> unknown29;
-
-    // test/replays/matches/1590688106.ggr (synctest 1f, frame 16661)
-    // at :base+59692
-    // not sure if this is needed
-    memory_offset<uint32_t, 0x51B17C> unknown30;
 };
 
 static_assert(sizeof(player_controller_state) == 152);
-static_assert(sizeof(match_state().player_direction_timers.get()) == 144);
+static_assert(sizeof(_match_state_1().player_direction_timers.get()) == 144);
 
-struct fiber_state
-{
-    // FIN
-    memory_offset<uint32_t, 0x55606c> pause_state;
-    // FIN
-    memory_offset<uint32_t, 0x5202e0> data1;
-    // FIN
-    memory_offset<float, 0x5202e4> data2;
-    // FIN, NXBT
-    memory_offset<uint32_t, 0x5202e8> data3;
 
-    memory_offset<uint32_t[0x70], 0x50BF30> charselect1;
-    memory_offset<uint32_t[0x72], 0x50ACC4> charselect2;
-    memory_offset<uint32_t[0x36], 0x555C40> charselect3;
-    memory_offset<uint32_t[2], 0x520DD0> charselect4;
-    memory_offset<uint32_t, 0x520E7C> charselect5;
-    memory_offset<uint32_t, 0x520E9C> charselect6;
-    memory_offset<uint32_t, 0x520EBC> charselect7;
-    memory_offset<uint32_t, 0x520EDC> charselect8;
-    memory_offset<uint32_t[2], 0x50AE38> charselect9;
-    memory_offset<uint32_t[0x1d], 0x44E3E0> charselect10;
-    memory_offset<uint32_t, 0x51B9E4> charselect11;
-    memory_offset<uint32_t, 0x3EA9FC> stage_select_controller;
-    memory_offset<uint64_t[0x10a], 0x44E664> random_stage_sequence;
-    memory_offset<uint64_t[6], 0x44E454> random_char_sequence;
-
-    // FOUT
-    memory_offset<uint32_t, 0x511B40> fout_condition;
-
-    // XAudio file loading queue?
-    memory_offset<uint32_t[0x1a], 0x51BA2C> data4;
-    memory_offset<uint32_t[0x82], 0x520B40> data5;
-
-    // VSCHA, VSVS ...
-    memory_offset<uint32_t[0x26], 0x555E6C> data6;
-};
-
-struct memory_regions
-{
-    // :base+41F70 allocates a memory region of 3800000 bytes (58 Mb)
-    // that is used extensively throughout process lifetime.
-    // Region address is stored at :base+54810C.
-    // It's divided into subregions of following sizes:
-    // 5A4800 500000 800000 800000 600000 190000 100000
-    // 100000 20000 20000 A000 100000 400000 800000 600000 81800
-    // 
-    // "GINI" and "VS  " fibers access the region of size 600000
-    // through a pointer at :base+0x520C1C.
-    // "VS  ": modifies region via ReadFile() in background thread
-    //         reads inside :base+4B7D0
-    // "GINI": modifies region memory directly
-    //         reads at (not important)
-    // For correct rollback, whole region should be restored (600000).
-    // It's obviously too big for that, so let's cheat for now
-    // and save only the "observed" size (i.e. non-zero memory)
-    // TODO: figure out how to rollback large memory regions in a fast and correct manner
-    std::shared_ptr<std::array<uint64_t, 0x1471E>> region1;
-};
-
-// _tiddata layout:
-// * https://github.com/nicecoolwinter/learn_c/blob/aa31897008b3042f9e49f52beee21dd5ba7a5ec6/vc_lib_src/src/mtdll.h#L135
-// * we're only interested in 'unsigned long   _holdrand' (offset 0x14)
-struct _tiddata
-{
-    uint32_t _dontcare[5]; // 0
-    uint32_t _holdrand; // 14
-};
-
-// match_state split into two types:
-// cl.exe cannot handle so much templates and stops with an out of memory error.
-struct match_state_2
+struct _match_state_2
 {
     memory_offset<uint32_t, 0x51B914> frame;
     memory_offset<uint8_t, 0x50F7e8> round_end_flag1;
@@ -571,22 +441,161 @@ struct match_state_2
     ptr_chain<std::array<uint32_t, 0x20>, 0x511908, 0> noninteractives_related;
 };
 
+struct _match_state_3
+{
+    // TODO: remove as much as possible of these 'unknown' values in the future
+    memory_offset<uint32_t, 0x3E37FC> unknown1;
+    memory_offset<uint32_t, 0x4F80E4> unknown2;
+    memory_offset<uint32_t, 0x5113B4> unknown3;
+    memory_offset<gg_object, 0x517BA8> unknown4;
+    memory_offset<uint32_t, 0x51B798> unknown5;
+    memory_offset<uint32_t, 0x51B7A4> unknown6;
+    memory_offset<uint32_t, 0x51B9DC> unknown8;
+    memory_offset<uint32_t, 0x51EDD4> unknown9;
+    memory_offset<uint32_t, 0x51EE6C> unknown10;
+    memory_offset<uint32_t, 0x51EF04> unknown11;
+    memory_offset<uint32_t, 0x51EF9C> unknown12;
+    memory_offset<uint32_t, 0x555D28> unknown13;
+    memory_offset<uint32_t, 0x55602C> unknown14;
+    memory_offset<uint32_t, 0x5561A8> unknown15;
+    memory_offset<gg_object, 0x517A78> unknown16;
+    memory_offset<uint8_t[0x2800], 0x5489F8> unknown17;
+    memory_offset<gg_object, 0x5163E0> unknown22;
+
+    // Used for validating throw attempt (opponent X axis position?).
+    // If it's not stored in game state, then rollback to the first frame
+    // of throws that put opponent far away (Kliff) will result in a hit
+    // instead of throw.
+    // test: test/replays/bugrepro/kliff_throw.ggr
+    memory_offset<uint32_t, 0x51B78C> unknown23;
+
+    // When a clash happens, this address is used as a condition
+    // for some calculations involving RNG (:base+6404A)
+    // test: test/replays/bugrepro/clash.ggr
+    memory_offset<uint32_t, 0x51B0CC> unknown24;
+
+    // test/replays/matches/session4.ggr (synctest 1f)
+    // at :base+25C2EA
+    // gg_object::active_move depends on this
+    memory_offset<uint32_t[0x56], 0x516288> unknown25;
+
+    // test/replays/bugrepro/justice_double_nb.ggr
+    // at :base+66B35
+    // rng desync after two NBs hit at the same time
+    memory_offset<uint32_t, 0x517CDC> unknown26;
+
+    // test/replays/matches/1590687408.ggr (synctest 1f, frame 2027)
+    // at :base+70F10
+    memory_offset<uint32_t[8], 0x516178> unknown27;
+
+    // test/replays/matches/1590687766.ggr (synctest 1f, frame 1537)
+    // at :base+BDCF5
+    // actual size seems to be 81800, because it's a copy of :base+54B208
+    // (see comment in struct memory_regions)
+    ptr_chain<std::array<uint32_t, 0x10>, 0x5118D0, 0> unknown28;
+
+    // test/replays/matches/1590688106.ggr (synctest 1f, frame 16661)
+    // at :base+55272
+    // something regarding air throw
+    memory_offset<uint32_t[2], 0x51B778> unknown29;
+
+    // test/replays/matches/1590688106.ggr (synctest 1f, frame 16661)
+    // at :base+59692
+    // not sure if this is needed
+    memory_offset<uint32_t, 0x51B17C> unknown30;
+};
+
+// split match_state into multiple structs to avoid 'compiler out of heap' errors
+// cl.exe cannot handle so much templates and stops with an out of memory error.
+struct match_state : _match_state_1, _match_state_2, _match_state_3
+{
+};
+
+struct fiber_state
+{
+    // FIN
+    memory_offset<uint32_t, 0x55606c> pause_state;
+    // FIN
+    memory_offset<uint32_t, 0x5202e0> data1;
+    // FIN
+    memory_offset<float, 0x5202e4> data2;
+    // FIN, NXBT
+    memory_offset<uint32_t, 0x5202e8> data3;
+
+    memory_offset<uint32_t[0x70], 0x50BF30> charselect1;
+    memory_offset<uint32_t[0x72], 0x50ACC4> charselect2;
+    memory_offset<uint32_t[0x36], 0x555C40> charselect3;
+    memory_offset<uint32_t[2], 0x520DD0> charselect4;
+    memory_offset<uint32_t, 0x520E7C> charselect5;
+    memory_offset<uint32_t, 0x520E9C> charselect6;
+    memory_offset<uint32_t, 0x520EBC> charselect7;
+    memory_offset<uint32_t, 0x520EDC> charselect8;
+    memory_offset<uint32_t[2], 0x50AE38> charselect9;
+    memory_offset<uint32_t[0x1d], 0x44E3E0> charselect10;
+    memory_offset<uint32_t, 0x51B9E4> charselect11;
+    memory_offset<uint32_t, 0x3EA9FC> stage_select_controller;
+    memory_offset<uint64_t[0x10a], 0x44E664> random_stage_sequence;
+    memory_offset<uint64_t[6], 0x44E454> random_char_sequence;
+
+    // FOUT
+    memory_offset<uint32_t, 0x511B40> fout_condition;
+
+    // XAudio file loading queue?
+    memory_offset<uint32_t[0x1a], 0x51BA2C> data4;
+    memory_offset<uint32_t[0x82], 0x520B40> data5;
+
+    // VSCHA, VSVS ...
+    memory_offset<uint32_t[0x26], 0x555E6C> data6;
+};
+
+struct memory_regions
+{
+    // :base+41F70 allocates a memory region of 3800000 bytes (58 Mb)
+    // that is used extensively throughout process lifetime.
+    // Region address is stored at :base+54810C.
+    // It's divided into subregions of following sizes:
+    // 5A4800 500000 800000 800000 600000 190000 100000
+    // 100000 20000 20000 A000 100000 400000 800000 600000 81800
+    // 
+    // "GINI" and "VS  " fibers access the region of size 600000
+    // through a pointer at :base+0x520C1C.
+    // "VS  ": modifies region via ReadFile() in background thread
+    //         reads inside :base+4B7D0
+    // "GINI": modifies region memory directly
+    //         reads at (not important)
+    // For correct rollback, whole region should be restored (600000).
+    // It's obviously too big for that, so let's cheat for now
+    // and save only the "observed" size (i.e. non-zero memory)
+    // TODO: figure out how to rollback large memory regions in a fast and correct manner
+    std::shared_ptr<std::array<uint64_t, 0x1471E>> region1;
+};
+
+// _tiddata layout:
+// * https://github.com/nicecoolwinter/learn_c/blob/aa31897008b3042f9e49f52beee21dd5ba7a5ec6/vc_lib_src/src/mtdll.h#L135
+// * we're only interested in 'unsigned long   _holdrand' (offset 0x14)
+struct _tiddata
+{
+    uint32_t _dontcare[5]; // 0
+    uint32_t _holdrand; // 14
+};
+
 struct game_state
 {
     match_state match;
-    match_state_2 match2;
     std::vector<fiber_mgmt::fiber_state> fibers;
     fiber_state fiber_state;
     memory_regions regions;
 };
 
-typedef void (process_input_func_t)();
-typedef void (process_objects_func_t)();
-typedef void (get_raw_input_data_func_t)(input_data* out);
-typedef int32_t (limit_fps_func_t)();
-typedef void (game_tick_func_t)();
+typedef void (gg_main_loop_func_t)();
+typedef void (get_input_func_t)(input_data* out);
+typedef void (process_audio_func_t)();
+typedef void (run_steam_callbacks_func_t)();
 typedef void (wait_file_readers_func_t)();
-typedef void (__stdcall sleep_func_t)(uint32_t ms);
+typedef void (draw1_func_t)(int);
+typedef void (draw2_func_t)();
+typedef uint32_t (get_current_fps_func_t)();
+typedef void (restart_process_func_t)();
 struct IXACT3WaveBank;
 struct IXACT3Wave;
 // IXACT3WaveBank_Play(__in IXACT3WaveBank* pWaveBank, XACTINDEX nWaveIndex, DWORD dwFlags, DWORD dwPlayOffset, XACTLOOPCOUNT nLoopCount, __deref_out IXACT3Wave** ppWave)
@@ -656,20 +665,31 @@ typedef void (draw_arrow_func_t)(
     uint32_t arrow_type, uint32_t x, uint32_t y, uint32_t unknown, uint32_t alpha
 );
 
-struct gg_state
+// forward-declaration
+struct IDirect3DDevice9;
+
+struct gg_globals
 {
-    // TODO: memory_offset => external
-    // TODO: remove rel_mem_ptr altogether
-    memory_offset<rel_mem_ptr<game_tick_func_t>, 0x14756E + 1> game_tick;
-    memory_offset<rel_mem_ptr<process_input_func_t>, 0x146F95 + 1> process_input;
-    memory_offset<rel_mem_ptr<get_raw_input_data_func_t>, 0x5263d + 1> get_raw_input_data;
-    memory_offset<rel_mem_ptr<process_objects_func_t>, 0x146F9A + 1> process_objects;
-    memory_offset<rel_mem_ptr<limit_fps_func_t>, 0x14ADC2 + 1> limit_fps;
-    memory_offset<sleep_func_t**, 0x14770C + 2> sleep_ptr;
+    // Split game's single main function into multiple:
+    // - get xinput/dinput data
+    // - advance game state without touching directx/xaudio
+    // - draw current frame
+    // - read queued audio files, play audio
+    // - run steam callbacks
+    // - restart game if requested (vsync on/off)
+    memory_offset<rel_mem_ptr<gg_main_loop_func_t>, 0x14756E + 1> gg_main_loop_func;
+    memory_offset<uint8_t[4], 0x146ffb> advance_frame_end_asm;
+    memory_offset<rel_mem_ptr<get_input_func_t>, 0x5263d + 1> get_input_func;
+    memory_offset<rel_mem_ptr<draw1_func_t>, 0x147004 + 1> draw1_func;
+    memory_offset<rel_mem_ptr<draw2_func_t>, 0x14700C + 1> draw2_func;
+    // Sleep() is called between EndScene() and Present() for some reason
+    memory_offset<uint8_t[5], 0x14ADC2> call_fps_sleep_func_asm;
+    memory_offset<run_steam_callbacks_func_t*, 0x269378> run_steam_callbacks_func_ptr;
+    memory_offset<rel_mem_ptr<process_audio_func_t>, 0x147011 + 1> process_audio_func;
     //**(*(*(:base+0x556020)+0x58)+0x34)+0x14
-    memory_offset<
-        ptr_chain<play_sound_func_t*, 0, 0x58, 0x34, 0, 0x14>,
-        0x556020> play_sound;
+    ptr_chain<play_sound_func_t*, 0x556020, 0x58, 0x34, 0, 0x14> play_sound_func;
+    memory_offset<rel_mem_ptr<get_current_fps_func_t>, 0x262B0C + 1> get_current_fps_func;
+
     // TODO: how to populate it automatically?
     write_cockpit_font_func_t* write_cockpit_font = nullptr;
     write_special_font_func_t* write_special_font = nullptr;
@@ -681,14 +701,14 @@ struct gg_state
     draw_arrow_func_t* draw_arrow = nullptr;
     player_status_ticker_func_t* player_status_ticker = nullptr;
     wait_file_readers_func_t* wait_file_readers = nullptr;
+    restart_process_func_t* restart_process_func = nullptr;
 
-    struct IDirect3DDevice9;
     memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
     memory_offset<HWND, 0x506554> hwnd;
 };
 
-void load_global_data(size_t memory_base, gg_state& state);
-void dump_global_data(size_t memory_base, const gg_state& state);
+void load_global_data(size_t memory_base, gg_globals& state);
+void dump_global_data(size_t memory_base, const gg_globals& state);
 
 void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service = nullptr);
 void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service = nullptr);

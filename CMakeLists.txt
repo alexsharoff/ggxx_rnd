@@ -40,7 +40,7 @@ add_library(libgg SHARED
     src/game.cpp
     src/game_state.cpp
     src/game_state_debug.cpp
-    src/ggpo.cpp
+    #src/ggpo.cpp
     src/libgg.cpp
     src/patches.cpp
     src/recorder.cpp

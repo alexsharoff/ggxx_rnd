@@ -4,6 +4,7 @@
 #include "util.h"
 #include "xact_audio.h"
 
+#include <chrono>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -14,215 +15,47 @@ using memory_dump::dump;
 using memory_dump::dump_unprotected;
 using memory_dump::local_memory_accessor;
 
+int32_t play_sound_impl(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t, IXACT3Wave**);
+
 // hooks for game functions
 namespace
 {
+
 IGame* g_game = nullptr;
-configuration* g_cfg = nullptr;
-gg_state g_global_data_orig;
-bool g_enable_fps_limit = true;
-size_t g_image_base = 0;
-std::unordered_map<IGame::Event, std::vector<IGame::CallbackFuncType>> g_callbacks;
-game_state g_state{};
 fiber_mgmt::fiber_service::ptr_t g_fiber_service;
-IGame::input_t g_input{};
-std::pair<IXACT3WaveBank*, int16_t> g_sound = { nullptr, static_cast<int16_t>(0) };
-uint32_t g_sleep_time = 0;
-bool g_is_ready = false;
-bool g_is_loading = false;
+XACT3Wave g_empty_wave;
 
-void get_raw_input_data(input_data* out)
-{
-    const auto f = *g_global_data_orig.get_raw_input_data.get().get();
-
-    input_data input{};
-    f(&input);
-
-    g_input[0] = input.keys[0];
-    g_input[1] = input.keys[1];
-
-    for (const auto& func : g_callbacks[IGame::Event::AfterGetInput])
-    {
-        if (!func(g_game))
-            break;
-    }
-
-    input.is_active[0] = 1;
-    input.is_active[1] = 1;
-    input.keys[0] = g_input[0];
-    input.keys[1] = g_input[1];
-    *out = input;
-}
-
-void process_input()
-{
-    const auto f = *g_global_data_orig.process_input.get().get();
-    f();
-
-    // TODO: update state?
-}
-
-void process_objects()
-{
-    const auto f = *g_global_data_orig.process_objects.get().get();
-    f();
-
-    // before reading game state, wait for background workers
-    // TODO: wait for sound file reader too?
-    g_global_data_orig.wait_file_readers();
-
-    save_current_state(g_image_base, g_state, g_fiber_service.get());
-
-    for (const auto& func : g_callbacks[IGame::Event::AfterProcessObjects])
-    {
-        if (!func(g_game))
-            return;
-    }
-}
-
-int32_t limit_fps()
-{
-    const auto f = *g_global_data_orig.limit_fps.get().get();
-    return g_enable_fps_limit ? f() : 0;
-}
-
-void __stdcall sleep(uint32_t ms)
-{
-    g_sleep_time = ms;
-    for (const auto& func : g_callbacks[IGame::Event::BeforeSleep])
-    {
-        if (!func(g_game))
-            return;
-    }
-
-    const auto f = **g_global_data_orig.sleep_ptr.get();
-    f(ms);
-}
-auto g_sleep_ptr = &sleep;
-
-XACT3Wave w;
 int32_t __stdcall play_sound(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_t a4, int8_t a5, IXACT3Wave** a6)
 {
-    g_sound = { a1, a2 };
-
-    for (const auto& func : g_callbacks[IGame::Event::BeforePlaySound])
-    {
-        if (!func(g_game))
-        {
-            *a6 = &w;
-            return 0;
-        }
-    }
-
-    const auto f = *g_global_data_orig.play_sound.get().ptr;
-    return f(a1, a2, a3, a4, a5, a6);
+    return play_sound_impl(a1, a2, a3, a4, a5, a6);
 }
 
-void game_tick()
+void gg_main_loop()
 {
-    if (!g_is_ready)
+    if (!g_game->Idle())
     {
-        decltype(match_state_2::menu_fibers) fibers;
-        load(g_image_base, fibers);
-        const auto& fiber_data = fibers.get()[0];
-        const auto is_loading = fiber_data.name == std::string_view("ATLD");
-        if (g_is_loading && !is_loading)
-        {
-            // Loading has ended
-            g_is_loading = false;
-
-            g_fiber_service = fiber_mgmt::fiber_service::start();
-
-            gg_state global_data;
-            load_global_data(g_image_base, global_data);
-            g_global_data_orig.play_sound = global_data.play_sound;
-            g_global_data_orig.hwnd = global_data.hwnd;
-            g_global_data_orig.direct3d9 = global_data.direct3d9;
-
-            global_data.get_raw_input_data.get().set(get_raw_input_data);
-            global_data.limit_fps.get().set(limit_fps);
-            global_data.process_input.get().set(process_input);
-            global_data.process_objects.get().set(process_objects);
-            global_data.sleep_ptr = &g_sleep_ptr;
-            global_data.play_sound.get().ptr = play_sound;
-            dump_global_data(g_image_base, global_data);
-
-            g_is_ready = true;
-
-            g_game->AutoIncrementRng(true);
-
-            save_current_state(g_image_base, g_state);
-
-            // Reset game clock to zero, we'll be using it as frame counter
-            g_state.match2.frame = 0;
-            dump_unprotected(g_state.match2.frame, g_image_base);
-        }
-        else
-        {
-            g_is_loading = is_loading;
-            const auto f = *g_global_data_orig.game_tick.get().get();
-            f();
-            return;
-        }
-    }
-
-    g_input[0] = 0;
-    g_input[1] = 0;
-
-    for (const auto& func : g_callbacks[IGame::Event::BeforeGameTick])
-    {
-        if (!func(g_game))
-            return;
-    }
-
-    const auto f = *g_global_data_orig.game_tick.get().get();
-    f();
-
-    for (const auto& func : g_callbacks[IGame::Event::AfterGameTick])
-    {
-        if (!func(g_game))
-            return;
+        g_game->ReadInput();
+        g_game->AdvanceFrame();
+        g_game->DrawFrame();
+        g_game->ProcessAudio();
+        g_game->RunSteamCallbacks();
+        g_game->RestartIfRequested();
     }
 }
 
-uint32_t button_bitmask_to_icon_bitmask(uint32_t input, const gg_char_state& state)
+void get_input_from_cache(input_data* out)
 {
-    gg_object state_wrapper;
-    state_wrapper.char_state_ptr = &state;
-    const auto obj = &state_wrapper;
-    auto f = g_global_data_orig.button_bitmask_to_icon_bitmask;
-    __asm
-    {
-        mov ecx, input
-        mov edx, obj
-        push 1
-        call f
-        add esp, 4
-    }
+    auto input = g_game->GetCachedInput();
+    *out = input_data{};
+    out->is_active[0] = 1;
+    out->is_active[1] = 1;
+    out->keys[0] = input[0];
+    out->keys[1] = input[1];
 }
 
-uint32_t direction_bitmask_to_icon_id(uint32_t input)
+uint32_t get_current_fps()
 {
-    uint32_t input_ = 0;
-    // additional preprocessing is required
-    if (input & 0x10)
-        input_ |= 4;
-    if (input & 0x20)
-        input_ |= 2;
-    if (input & 0x40)
-        input_ |= 8;
-    if (input & 0x80)
-        input_ |= 1;
-
-    auto f = g_global_data_orig.direction_bitmask_to_icon_id;
-    __asm
-    {
-        mov ecx, input_
-        push 0
-        push input_
-        call f
-        add esp, 4*2
-    }
+    return g_game->GetCurrentFps();
 }
 
 }
@@ -230,47 +63,62 @@ uint32_t direction_bitmask_to_icon_id(uint32_t input)
 class Game : public IGame
 {
 public:
-    Game(size_t image_base, configuration*) : m_isReady(false)
+    Game(size_t image_base, configuration*) : m_image_base(image_base)
     {
-        g_image_base = image_base;
+        load_global_data(image_base, m_globals_orig);
 
-        gg_state global_data;
-        load_global_data(image_base, global_data);
-        g_global_data_orig = global_data;
+        PatchMainLoop();
 
-        // wait until the game is loaded (ie Loading fiber has exited)
-        global_data.game_tick.get().set(game_tick);
-        dump_global_data(image_base, global_data);
-
-        AutoIncrementRng(false);
-
-        g_game = this;
+        // Each frame, RNG (Mersenne Twister) index is incremented even if it was unused.
+        // Game loading time (in frames) may fluctuate, this makes replaying pre-recorded input
+        // non-deterministic.
+        // Automatic RNG index increment should be disabled during loading.
+        EnableRngAutoIncrement(false);
     }
 
-    void EnableDrawing(bool enable) final
+    void PatchMainLoop()
     {
-        const auto addr = (size_t)g_image_base + 0x146FFD;
-        if (enable)
-        {
-            // 0x75 = jne
-            local_memory_accessor::write(static_cast<uint8_t>(0x75), addr);
-        }
-        else
-        {
-            // 0xEB = jmp
-            local_memory_accessor::write(static_cast<uint8_t>(0xEB), addr);
-        }
-        m_drawingEnabled = enable;
+        gg_globals globals = m_globals_orig;
+        // return before directx, xaudio, steam callbacks
+        globals.advance_frame_end_asm.get()[0] = 0x5F; // pop edi
+        globals.advance_frame_end_asm.get()[1] = 0x5E; // pop esi
+        globals.advance_frame_end_asm.get()[2] = 0x5B; // pop ebx
+        globals.advance_frame_end_asm.get()[3] = 0xC3; // ret
+        // replace game main loop with ggpo-compatible implementation
+        globals.gg_main_loop_func.get().set(gg_main_loop);
+        // replace fps function with more accurate implementation (64-bit)
+        // for > 60 fps replay fast-forward
+        globals.get_current_fps_func.get().set(get_current_fps);
+        // don't call built-in fps limiter
+        for (size_t i = 0; i < 5; ++i)
+            globals.call_fps_sleep_func_asm.get()[i] = 0x90; // nop
+        globals.get_input_func.get().set(get_input_from_cache);
+        dump_global_data(m_image_base, globals);
     }
 
-    bool IsDrawingEnabled() const final
+    // Should be called after the game has finished loading
+    bool InitializeRemainingHooks()
     {
-        return m_drawingEnabled;
+        gg_globals globals;
+        load_global_data(m_image_base, globals);
+        if (!globals.play_sound_func.ptr)
+            return false;
+
+        // get newly initialized global values
+        m_globals_orig.play_sound_func = globals.play_sound_func;
+        m_globals_orig.hwnd = globals.hwnd;
+        m_globals_orig.direct3d9 = globals.direct3d9;
+
+        // replace XAudio function with our hook
+        globals.play_sound_func.ptr = play_sound;
+        dump(globals.play_sound_func, m_image_base);
+
+        return true;
     }
 
     void EnablePauseMenu(bool enable) final
     {
-        const auto addr = (size_t)g_image_base + 0xEBC19;
+        const auto addr = (size_t)m_image_base + 0xEBC19;
         if (enable)
         {
             // 0F84 = je
@@ -285,19 +133,41 @@ public:
         }
     }
 
-    void EnableFpsLimit(bool enable) final
+    void SetFpsLimit(uint32_t fps) final
     {
-        g_enable_fps_limit = enable;
+        m_fps = fps;
     }
 
-    bool IsFpsLimitEnabled() const final
+    uint32_t GetFpsLimit(uint32_t) const final
     {
-        return g_enable_fps_limit;
+        return m_fps;
     }
 
-    void AutoIncrementRng(bool enable) const final
+    uint32_t GetCurrentFps() const final
     {
-        const auto addr = (size_t)g_image_base + 0x4323C;
+        if (m_fps_timestamp_idx < 0x20)
+        {
+            if (m_fps_timestamp_idx < 2)
+                return 60;
+            auto last_timestamp = m_fps_timestamps[(m_fps_timestamp_idx - 1) & 0x1f];
+            auto prev_timestamp = m_fps_timestamps[(m_fps_timestamp_idx - 2) & 0x1f];
+            return static_cast<uint32_t>(
+                std::round(double(1000000) / (last_timestamp - prev_timestamp))
+            );
+        }
+        else
+        {
+            auto last_timestamp = m_fps_timestamps[(m_fps_timestamp_idx - 1) & 0x1f];
+            auto first_timestamp = m_fps_timestamps[(m_fps_timestamp_idx) & 0x1f];
+            return static_cast<uint32_t>(
+                std::round(double(1000000 * (m_fps_timestamps.size() - 1)) / (last_timestamp - first_timestamp))
+            );
+        }
+    }
+
+    void EnableRngAutoIncrement(bool enable)
+    {
+        const auto addr = (size_t)m_image_base + 0x4323C;
         if (enable)
         {
             // 75 = jne
@@ -314,25 +184,7 @@ public:
 
     const game_state& GetState() const final
     {
-        return g_state;
-    }
-
-    const input_t& GetInput() const final
-    {
-        return g_input;
-    }
-
-    const input_t GetInputRemapped() const final
-    {
-        decltype(g_input) input;
-        const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
-        input[0] = g_game->RemapButtons(
-            g_input[0], controller_configs[0], game_config::default_controller_config
-        );
-        input[1] = g_game->RemapButtons(
-            g_input[1], controller_configs[1], game_config::default_controller_config
-        );
-        return input;
+        return m_state;
     }
 
     void SetState(const game_state& state) final
@@ -340,7 +192,7 @@ public:
         std::unordered_set<LPVOID> remaining_fibers;
         for (const auto& f : state.fibers)
             remaining_fibers.insert(f.shared->fiber);
-        for (const auto& f : g_state.fibers)
+        for (const auto& f : m_state.fibers)
         {
             const auto fiber = f.shared->fiber;
             if (remaining_fibers.find(fiber) != remaining_fibers.end())
@@ -349,29 +201,119 @@ public:
             g_fiber_service->release(fiber);
         }
 
-        g_state = state;
-        revert_state(g_image_base, g_state, g_fiber_service.get());
+        m_state = state;
+        revert_state(m_image_base, m_state, g_fiber_service.get());
     }
 
-    void SetInput(const input_t& input) final
+    void ReadInput() final
     {
-        g_input = input;
+        const auto f = *m_globals_orig.get_input_func.get().get();
+
+        input_data input{};
+        f(&input);
+
+        m_input[0] = input.keys[0];
+        m_input[1] = input.keys[1];
+
+        for (const auto& func : m_callbacks[IGame::Event::AfterReadInput])
+        {
+            if (!func(this))
+                break;
+        }
     }
 
-    void SetInputRemapped(const input_t& input) final
+    void DrawFrame() final
+    {
+        bool skip = false;
+        for (const auto& func : m_callbacks[IGame::Event::BeforeDrawFrame])
+        {
+            if (!func(this))
+            {
+                skip = true;
+                break;
+            }
+        }
+
+        if (!skip)
+        {
+            // taken from :base+146FFB
+            auto cond1 = *reinterpret_cast<uint32_t*>(m_image_base + 0x50654C);
+            if (cond1 & 2)
+                return;
+
+            auto cond2 = *reinterpret_cast<uint32_t*>(m_image_base + 0x555FDC);
+            if (!cond2)
+            {
+                auto f = *m_globals_orig.draw1_func.get();
+                f(1);
+            }
+            auto f = *m_globals_orig.draw2_func.get();
+            f();
+        }
+
+        UpdateFpsTimestamps();
+    }
+
+    void UpdateFpsTimestamps()
+    {
+        using std::chrono::time_point_cast;
+        using std::chrono::microseconds;
+        using std::chrono::high_resolution_clock;
+        auto mcs = time_point_cast<microseconds>(high_resolution_clock::now()).time_since_epoch().count();
+        m_fps_timestamps[m_fps_timestamp_idx++ & 0x1f] = mcs;
+        if (m_fps_timestamp_idx == 0x40)
+            m_fps_timestamp_idx = 0x20;
+    }
+
+    void ProcessAudio() final
+    {
+        auto func = m_globals_orig.process_audio_func.get();
+        func();
+    }
+
+    void RunSteamCallbacks() final
+    {
+        auto func = m_globals_orig.run_steam_callbacks_func_ptr.get();
+        func();
+    }
+
+    input_t GetCachedInput() const final
+    {
+        return m_input;
+    }
+
+    void SetCachedInput(const input_t& input) final
+    {
+        m_input = input;
+    }
+
+    input_t RemapInputToDefault(input_t input) const final
     {
         const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
-        g_input[0] = g_game->RemapButtons(
+        input[0] = g_game->RemapButtons(
+            m_input[0], controller_configs[0], game_config::default_controller_config
+        );
+        input[1] = g_game->RemapButtons(
+            m_input[1], controller_configs[1], game_config::default_controller_config
+        );
+        return input;
+    }
+
+    input_t RemapInputFromDefault(input_t input) final
+    {
+        const auto& controller_configs = g_game->GetGameConfig().player_controller_config;
+        input[0] = g_game->RemapButtons(
             input[0], game_config::default_controller_config, controller_configs[0]
         );
-        g_input[1] = g_game->RemapButtons(
+        input[1] = g_game->RemapButtons(
             input[1], game_config::default_controller_config, controller_configs[1]
         );
+        return input;
     }
 
     void DisplayPlayerStatusTicker(const char* message, uint32_t side) final
     {
-        auto f = g_global_data_orig.player_status_ticker;
+        auto f = m_globals_orig.player_status_ticker;
         // Custom calling convention due to LTCG:
         // * Message in ESI
         // * Side (0, 1) in EAX
@@ -386,7 +328,7 @@ public:
     void DrawRect(uint32_t color, uint32_t x1, uint32_t y1,
                           uint32_t x2, uint32_t y2) final
     {
-        auto f = g_global_data_orig.draw_rect;
+        auto f = m_globals_orig.draw_rect;
         __asm
         {
             push 4
@@ -405,11 +347,11 @@ public:
                                float scale_x = 1, float scale_y = 1) final
     {
         float scale_x_orig, scale_y_orig;
-        load(g_image_base + 0x3EE774, scale_x_orig);
-        load(g_image_base + 0x3EE83C, scale_y_orig);
-        dump(scale_x, g_image_base + 0x3EE774);
-        dump(scale_y, g_image_base + 0x3EE83C);
-        auto f = g_global_data_orig.write_utf8_font;
+        load(m_image_base + 0x3EE774, scale_x_orig);
+        load(m_image_base + 0x3EE83C, scale_y_orig);
+        dump(scale_x, m_image_base + 0x3EE774);
+        dump(scale_y, m_image_base + 0x3EE83C);
+        auto f = m_globals_orig.write_utf8_font;
         __asm
         {
             push 0
@@ -422,33 +364,33 @@ public:
             call f
             add esp, 4*6
         }
-        dump(scale_x_orig, g_image_base + 0x3EE774);
-        dump(scale_y_orig, g_image_base + 0x3EE83C);
+        dump(scale_x_orig, m_image_base + 0x3EE774);
+        dump(scale_y_orig, m_image_base + 0x3EE83C);
     }
 
     void WriteCockpitFont(const char* buffer, int x, int y, float z,
                                   uint8_t alpha, float scale) final
     {
-        g_global_data_orig.write_cockpit_font(buffer, x, y, z, alpha, scale);
+        m_globals_orig.write_cockpit_font(buffer, x, y, z, alpha, scale);
     }
 
     void WriteSpecialFont(const char* text, float x, float y, float z,
                                   uint32_t flags, uint32_t font, float scale) final
     {
-        g_global_data_orig.write_special_font(text, x, y, z, flags, font, scale);
+        m_globals_orig.write_special_font(text, x, y, z, flags, font, scale);
     }
 
     void DrawPressedButtons(uint32_t input_bitmask, const gg_char_state& player_state, uint32_t x, uint32_t y) final
     {
         // TODO: reimplement, this doesn't work in menus
         const auto buttons = button_bitmask_to_icon_bitmask(input_bitmask, player_state);
-        g_global_data_orig.draw_pressed_buttons(buttons, x, y, 3, 1);
+        m_globals_orig.draw_pressed_buttons(buttons, x, y, 3, 1);
     }
 
     void DrawPressedDirection(uint32_t input_bitmask, uint32_t x, uint32_t y) final
     {
         const auto directions = direction_bitmask_to_icon_id(input_bitmask);
-        g_global_data_orig.draw_pressed_buttons(directions, x, y, 3, 1);
+        m_globals_orig.draw_pressed_buttons(directions, x, y, 3, 1);
     }
 
     uint16_t RemapButtons(uint16_t input, const game_config::controller_config& from,
@@ -504,13 +446,13 @@ public:
 
     const game_config& GetGameConfig() const final
     {
-        return g_state.match2.config.get();
+        return m_state.match.config.get();
     }
 
     bool InMatch() const final
     {
-        const auto& fibers = g_state.match2.menu_fibers.get();
-        if (g_state.match2.next_fiber_id != fiber_id::match)
+        const auto& fibers = m_state.match.menu_fibers.get();
+        if (m_state.match.next_fiber_id != fiber_id::match)
             return false;
         for (const auto& f : fibers)
         {
@@ -528,25 +470,25 @@ public:
 
     bool InTrainingMode() const final
     {
-        const auto game_mode = g_state.match2.game_mode.get();
+        const auto game_mode = m_state.match.game_mode.get();
         return game_mode & 0x100;
     }
 
     bool InVs2p() const final
     {
-        const auto game_mode = g_state.match2.game_mode.get();
+        const auto game_mode = m_state.match.game_mode.get();
         return game_mode & 0x800;
     }
 
     uint32_t GetActivePlayers() const final
     {
-        const auto game_mode = g_state.match2.game_mode.get();
+        const auto game_mode = m_state.match.game_mode.get();
         return game_mode & 0x3;
     }
 
     bool FindFiberByName(const std::string_view& name) const final
     {
-        const auto& fibers = g_state.match2.menu_fibers.get();
+        const auto& fibers = m_state.match.menu_fibers.get();
         for (const auto& f : fibers)
         {
             if (f.name == name)
@@ -555,67 +497,208 @@ public:
         return false;
     }
 
+    void AdvanceFrame() final
+    {
+        if (!m_ready)
+        {
+            decltype(match_state::menu_fibers) fibers;
+            load(m_image_base, fibers);
+            const auto& fiber_data = fibers.get()[0];
+            // wait until the game has loaded (ie Loading fiber has exited)
+            const auto is_loading = fiber_data.name == std::string_view("ATLD");
+            if (!is_loading && InitializeRemainingHooks())
+            {
+                if (!g_fiber_service)
+                    g_fiber_service = fiber_mgmt::fiber_service::start();
+
+                m_ready = true;
+
+                EnableRngAutoIncrement(true);
+
+                save_current_state(m_image_base, m_state);
+
+                // Reset game clock to zero, we'll be using it as frame counter
+                // Also, same game state with different clock values may produce
+                // different results (IK animation timings, wake-up timings?)
+                m_state.match.frame = 0;
+                dump_unprotected(m_state.match.frame, m_image_base);
+            }
+            else
+            {
+                const auto f = *m_globals_orig.gg_main_loop_func.get();
+                f();
+                return;
+            }
+        }
+
+        for (const auto& func : m_callbacks[IGame::Event::BeforeAdvanceFrame])
+        {
+            if (!func(this))
+                return;
+        }
+
+        const auto f = *m_globals_orig.gg_main_loop_func.get();
+        f();
+
+        // before reading game state, wait for background workers
+        // TODO: wait for sound file reader too?
+        m_globals_orig.wait_file_readers();
+
+        save_current_state(m_image_base, m_state, g_fiber_service.get());
+
+        for (const auto& func : m_callbacks[IGame::Event::AfterAdvanceFrame])
+        {
+            if (!func(this))
+                break;
+        }
+    }
+
+    int32_t MsTillNextFrame() const final
+    {
+        auto now = std::chrono::high_resolution_clock::now();
+        auto ms_left = std::chrono::duration_cast<std::chrono::milliseconds>(m_next_frame - now).count();
+        return static_cast<int32_t>(ms_left);
+    }
+
+    bool Idle() final
+    {
+        for (auto func : m_callbacks[IGame::Event::Idle])
+        {
+            if (!func(this))
+                return true;
+        }
+
+        const auto now = std::chrono::high_resolution_clock::now();
+        bool still_idle = now < m_next_frame;
+        if (!still_idle)
+        {
+            std::chrono::nanoseconds increment = std::chrono::seconds(1);
+            increment /= m_fps;
+            auto fps = GetCurrentFps();
+            uint32_t delta = std::max(m_fps / 60, 1u);
+            if (fps + delta < m_fps)
+                m_next_frame = now + increment;
+            else
+                m_next_frame += increment;
+        }
+        return still_idle;
+    }
+
+    void RestartIfRequested() final
+    {
+        // taken from :base+14701C
+        int flag = *reinterpret_cast<int*>(m_image_base + 0x555BB4);
+        if (flag == 0)
+            return;
+        m_globals_orig.restart_process_func();
+    }
+
     const std::pair<IXACT3WaveBank*, int16_t>& GetCurrentSound() const final
     {
-        return g_sound;
-    }
-
-    const uint32_t GetSleepTime() const final
-    {
-        return g_sleep_time;
-    }
-
-    void GameTick() const final
-    {
-        game_tick();
-    }
-
-    void GetInputRaw(input_data* out) const final
-    {
-        get_raw_input_data(out);
-    }
-
-    void ProcessInput() const final
-    {
-        process_input();
-    }
-
-    void ProcessObjects() const final
-    {
-        process_objects();
-    }
-
-    int32_t LimitFps() const final
-    {
-        return limit_fps();
+        return m_sound;
     }
 
     size_t GetImageBase() const final
     {
-        return g_image_base;
+        return m_image_base;
     }
 
     HWND GetWindowHandle() const final
     {
-        return g_global_data_orig.hwnd;
+        return m_globals_orig.hwnd;
     }
 
-    void RegisterCallback(Event event, std::function<bool(IGame*)> f, CallbackPosition pos) final
+    IDirect3DDevice9* GetDirect3D9Device() const final
+    {
+        return *m_globals_orig.direct3d9;
+    }
+
+    void RegisterCallback(Event event, CallbackFuncType f, CallbackPosition pos) final
     {
         if (pos == CallbackPosition::Last)
-            g_callbacks[event].push_back(f);
+            m_callbacks[event].push_back(f);
         else
-            g_callbacks[event].insert(g_callbacks[event].begin(), f);
+            m_callbacks[event].insert(m_callbacks[event].begin(), f);
     }
 
 private:
-    bool m_isReady;
-    bool m_drawingEnabled = true;
+    friend int32_t play_sound_impl(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t, IXACT3Wave**);
+
+    gg_globals m_globals_orig;
+    std::chrono::high_resolution_clock::time_point m_next_frame = std::chrono::high_resolution_clock::now();
+    uint32_t m_fps = 60;
+    std::unordered_map<IGame::Event, std::vector<IGame::CallbackFuncType>> m_callbacks;
+    game_state m_state{};
+    std::pair<IXACT3WaveBank*, int16_t> m_sound = { nullptr, static_cast<int16_t>(0) };
+    size_t m_image_base = 0;
+    bool m_ready = false;
+    input_t m_input;
+    size_t m_fps_timestamp_idx = 0;
+    std::array<uint64_t, 0x20> m_fps_timestamps = { 0 };
+
+    uint32_t button_bitmask_to_icon_bitmask(uint32_t input, const gg_char_state& state)
+    {
+        gg_object state_wrapper;
+        state_wrapper.char_state_ptr = &state;
+        const auto obj = &state_wrapper;
+        auto f = m_globals_orig.button_bitmask_to_icon_bitmask;
+        __asm
+        {
+            mov ecx, input
+            mov edx, obj
+            push 1
+            call f
+            add esp, 4
+        }
+    }
+
+    uint32_t direction_bitmask_to_icon_id(uint32_t input)
+    {
+        uint32_t input_ = 0;
+        // additional preprocessing is required
+        if (input & 0x10)
+            input_ |= 4;
+        if (input & 0x20)
+            input_ |= 2;
+        if (input & 0x40)
+            input_ |= 8;
+        if (input & 0x80)
+            input_ |= 1;
+
+        auto f = m_globals_orig.direction_bitmask_to_icon_id;
+        __asm
+        {
+            mov ecx, input_
+            push 0
+            push input_
+            call f
+            add esp, 4*2
+        }
+    }
 };
+
+int32_t play_sound_impl(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_t a4, int8_t a5, IXACT3Wave** a6)
+{
+    auto game = dynamic_cast<Game*>(g_game);
+    game->m_sound = { a1, a2 };
+    for (const auto& func : game->m_callbacks[IGame::Event::BeforePlaySound])
+    {
+        if (!func(g_game))
+        {
+            *a6 = &g_empty_wave;
+            game->m_sound = { nullptr, static_cast<int16_t>(0) };
+            return 0;
+        }
+    }
+
+    const auto f = *game->m_globals_orig.play_sound_func.ptr;
+    return f(a1, a2, a3, a4, a5, a6);
+}
 
 std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, configuration* cfg)
 {
-    assert(g_image_base == 0);
-    g_cfg = cfg;
-    return std::make_shared<Game>(baseAddress, cfg);
+    assert(g_game == nullptr);
+    auto game = std::make_shared<Game>(baseAddress, cfg);
+    g_game = game.get();
+    return game;
 }

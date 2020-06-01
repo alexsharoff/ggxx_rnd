@@ -75,145 +75,164 @@ struct reflect<gg_object>
 };
 
 template<>
+struct reflect<_match_state_1>
+{
+    constexpr static auto members = member_tuple(
+        &_match_state_1::character_state,
+        &_match_state_1::camera_state,
+        &_match_state_1::player_button_timers,
+        &_match_state_1::player_direction_timers,
+        &_match_state_1::player_controller_state,
+        &_match_state_1::data,
+        &_match_state_1::char_mode_gold,
+        &_match_state_1::char_mode_ex,
+        &_match_state_1::char_mode_sp,
+        &_match_state_1::controller_state,
+        &_match_state_1::controller_state2,
+        &_match_state_1::noninteractives,
+        &_match_state_1::noninteractives_meta,
+        &_match_state_1::p1_character,
+        &_match_state_1::p2_character,
+        &_match_state_1::p1_character_ptr,
+        &_match_state_1::p2_character_ptr,
+        &_match_state_1::projectiles,
+        &_match_state_1::projectiles_ptr,
+        &_match_state_1::training_mode_history,
+        &_match_state_1::training_mode_cfg_display,
+        &_match_state_1::training_mode_data,
+        &_match_state_1::pause_state,
+        &_match_state_1::extra_rng_state1,
+        &_match_state_1::extra_rng_state2,
+
+        &_match_state_1::graphics1,
+        &_match_state_1::graphics2,
+        &_match_state_1::graphics3,
+        &_match_state_1::graphics4,
+        &_match_state_1::graphics5,
+        &_match_state_1::graphics6,
+        &_match_state_1::graphics7,
+        &_match_state_1::graphics8,
+        &_match_state_1::graphics9,
+        &_match_state_1::graphics10,
+        &_match_state_1::graphics11,
+        &_match_state_1::graphics12,
+        &_match_state_1::graphics13,
+        &_match_state_1::graphics14,
+        &_match_state_1::graphics15,
+        &_match_state_1::graphics16,
+        &_match_state_1::graphics17,
+        &_match_state_1::graphics18,
+        &_match_state_1::graphics19,
+        &_match_state_1::graphics20
+    );
+};
+
+template<>
+struct reflect<_match_state_2>
+{
+    constexpr static auto members = member_tuple(
+        &_match_state_2::frame,
+        &_match_state_2::p1_rounds_won,
+        &_match_state_2::p2_rounds_won,
+        &_match_state_2::round_end_bitmask,
+        &_match_state_2::round_end_hitstop,
+        &_match_state_2::match_countdown,
+        &_match_state_2::round_end_flag1,
+        &_match_state_2::round_end_flag2,
+        &_match_state_2::round_end_flag3,
+        &_match_state_2::round_end_flag4,
+        &_match_state_2::round_state,
+        &_match_state_2::menu_fibers,
+        &_match_state_2::rng1,
+        &_match_state_2::rng2,
+        &_match_state_2::extra_config,
+        &_match_state_2::game_mode,
+        &_match_state_2::config,
+        &_match_state_2::next_fiber_id,
+        &_match_state_2::charselect_p1_enabled,
+        &_match_state_2::charselect_p2_enabled,
+        &_match_state_2::main_menu_idx,
+        &_match_state_2::effect_data1,
+        &_match_state_2::effect_data2,
+        &_match_state_2::effect_data3,
+        &_match_state_2::effect_data4,
+        &_match_state_2::effect_data5,
+        &_match_state_2::effect_data6,
+        &_match_state_2::effect_data7,
+        &_match_state_2::tiddata_fls_index,
+        &_match_state_2::black_screen_opacity,
+        &_match_state_2::selected_bgm,
+        &_match_state_2::selected_stage,
+        &_match_state_2::slayer_haiku,
+        &_match_state_2::dustcombo_rng_related1,
+        &_match_state_2::dustcombo_rng_related2,
+        &_match_state_2::overdrive_or_round_end_rng_related1,
+        &_match_state_2::overdrive_or_round_end_rng_related2,
+        &_match_state_2::overdrive_or_round_end_rng_related3,
+        &_match_state_2::noninteractives_rng_related1,
+        &_match_state_2::round_end_rng_related1,
+        &_match_state_2::noninteractives_related
+    );
+};
+
+template<>
+struct reflect<_match_state_3>
+{
+    constexpr static auto members = member_tuple(
+        &_match_state_3::unknown1,
+        &_match_state_3::unknown2,
+        &_match_state_3::unknown3,
+        &_match_state_3::unknown4,
+        &_match_state_3::unknown5,
+        &_match_state_3::unknown6,
+        &_match_state_3::unknown8,
+        &_match_state_3::unknown9,
+        &_match_state_3::unknown10,
+        &_match_state_3::unknown11,
+        &_match_state_3::unknown12,
+        &_match_state_3::unknown13,
+        &_match_state_3::unknown14,
+        &_match_state_3::unknown15,
+        &_match_state_3::unknown16,
+        &_match_state_3::unknown17,
+        &_match_state_3::unknown22,
+        &_match_state_3::unknown23,
+        &_match_state_3::unknown24,
+        &_match_state_3::unknown25,
+        &_match_state_3::unknown26,
+        &_match_state_3::unknown27,
+        &_match_state_3::unknown28,
+        &_match_state_3::unknown29,
+        &_match_state_3::unknown30
+    );
+};
+
+template<>
 struct reflect<match_state>
 {
     constexpr static auto members = member_tuple(
-        &match_state::character_state,
-        &match_state::camera_state,
-        &match_state::player_button_timers,
-        &match_state::player_direction_timers,
-        &match_state::player_controller_state,
-        &match_state::data,
-        &match_state::char_mode_gold,
-        &match_state::char_mode_ex,
-        &match_state::char_mode_sp,
-        &match_state::controller_state,
-        &match_state::controller_state2,
-        &match_state::noninteractives,
-        &match_state::noninteractives_meta,
-        &match_state::p1_character,
-        &match_state::p2_character,
-        &match_state::p1_character_ptr,
-        &match_state::p2_character_ptr,
-        &match_state::projectiles,
-        &match_state::projectiles_ptr,
-        &match_state::training_mode_history,
-        &match_state::training_mode_cfg_display,
-        &match_state::training_mode_data,
-        &match_state::pause_state,
-        &match_state::extra_rng_state1,
-        &match_state::extra_rng_state2,
-
-        &match_state::graphics1,
-        &match_state::graphics2,
-        &match_state::graphics3,
-        &match_state::graphics4,
-        &match_state::graphics5,
-        &match_state::graphics6,
-        &match_state::graphics7,
-        &match_state::graphics8,
-        &match_state::graphics9,
-        &match_state::graphics10,
-        &match_state::graphics11,
-        &match_state::graphics12,
-        &match_state::graphics13,
-        &match_state::graphics14,
-        &match_state::graphics15,
-        &match_state::graphics16,
-        &match_state::graphics17,
-        &match_state::graphics18,
-        &match_state::graphics19,
-        &match_state::graphics20,
-
-        &match_state::unknown1,
-        &match_state::unknown2,
-        &match_state::unknown3,
-        &match_state::unknown4,
-        &match_state::unknown5,
-        &match_state::unknown6,
-        &match_state::unknown8,
-        &match_state::unknown9,
-        &match_state::unknown10,
-        &match_state::unknown11,
-        &match_state::unknown12,
-        &match_state::unknown13,
-        &match_state::unknown14,
-        &match_state::unknown15,
-        &match_state::unknown16,
-        &match_state::unknown17,
-        &match_state::unknown22,
-        &match_state::unknown23,
-        &match_state::unknown24,
-        &match_state::unknown25,
-        &match_state::unknown26,
-        &match_state::unknown27,
-        &match_state::unknown28,
-        &match_state::unknown29,
-        &match_state::unknown30
+        reflect<_match_state_1>::members,
+        reflect<_match_state_2>::members,
+        reflect<_match_state_3>::members
     );
 };
 
 template<>
-struct reflect<match_state_2>
+struct reflect<gg_globals>
 {
     constexpr static auto members = member_tuple(
-        &match_state_2::frame,
-        &match_state_2::p1_rounds_won,
-        &match_state_2::p2_rounds_won,
-        &match_state_2::round_end_bitmask,
-        &match_state_2::round_end_hitstop,
-        &match_state_2::match_countdown,
-        &match_state_2::round_end_flag1,
-        &match_state_2::round_end_flag2,
-        &match_state_2::round_end_flag3,
-        &match_state_2::round_end_flag4,
-        &match_state_2::round_state,
-        &match_state_2::menu_fibers,
-        &match_state_2::rng1,
-        &match_state_2::rng2,
-        &match_state_2::extra_config,
-        &match_state_2::game_mode,
-        &match_state_2::config,
-        &match_state_2::next_fiber_id,
-        &match_state_2::charselect_p1_enabled,
-        &match_state_2::charselect_p2_enabled,
-        &match_state_2::main_menu_idx,
-        &match_state_2::effect_data1,
-        &match_state_2::effect_data2,
-        &match_state_2::effect_data3,
-        &match_state_2::effect_data4,
-        &match_state_2::effect_data5,
-        &match_state_2::effect_data6,
-        &match_state_2::effect_data7,
-        &match_state_2::tiddata_fls_index,
-        &match_state_2::black_screen_opacity,
-        &match_state_2::selected_bgm,
-        &match_state_2::selected_stage,
-        &match_state_2::slayer_haiku,
-        &match_state_2::dustcombo_rng_related1,
-        &match_state_2::dustcombo_rng_related2,
-        &match_state_2::overdrive_or_round_end_rng_related1,
-        &match_state_2::overdrive_or_round_end_rng_related2,
-        &match_state_2::overdrive_or_round_end_rng_related3,
-        &match_state_2::noninteractives_rng_related1,
-        &match_state_2::round_end_rng_related1,
-        &match_state_2::noninteractives_related
-    );
-};
-
-template<>
-struct reflect<gg_state>
-{
-    constexpr static auto members = member_tuple(
-        &gg_state::get_raw_input_data,
-        &gg_state::limit_fps,
-        &gg_state::game_tick,
-        &gg_state::sleep_ptr,
-        &gg_state::play_sound,
-        &gg_state::process_objects,
-        &gg_state::process_input,
-        &gg_state::direct3d9,
-        &gg_state::hwnd
+        &gg_globals::gg_main_loop_func,
+        &gg_globals::advance_frame_end_asm,
+        &gg_globals::get_input_func,
+        &gg_globals::draw1_func,
+        &gg_globals::draw2_func,
+        &gg_globals::call_fps_sleep_func_asm,
+        &gg_globals::run_steam_callbacks_func_ptr,
+        &gg_globals::process_audio_func,
+        &gg_globals::play_sound_func,
+        &gg_globals::get_current_fps_func,
+        &gg_globals::direct3d9,
+        &gg_globals::hwnd
     );
 };
 
@@ -246,7 +265,7 @@ struct reflect<fiber_state>
     );
 };
 
-void load_global_data(size_t image_base, gg_state& state)
+void load_global_data(size_t image_base, gg_globals& state)
 {
     load(image_base, state);
     state.write_cockpit_font = reinterpret_cast<write_cockpit_font_func_t*>(image_base + 0x10ECF0);
@@ -260,9 +279,10 @@ void load_global_data(size_t image_base, gg_state& state)
     state.draw_arrow = reinterpret_cast<draw_arrow_func_t*>(image_base + 0x4CBE0);
     state.player_status_ticker = reinterpret_cast<player_status_ticker_func_t*>(image_base + 0x10E190);
     state.wait_file_readers = reinterpret_cast<wait_file_readers_func_t*>(image_base + 0x4B980);
+    state.restart_process_func = reinterpret_cast<restart_process_func_t*>(image_base + 0x1464F0);
 }
 
-void dump_global_data(size_t memory_base, const gg_state& state)
+void dump_global_data(size_t memory_base, const gg_globals& state)
 {
     dump(state, memory_base);
 }
@@ -285,11 +305,10 @@ void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_servic
 {
     set_pallette_reset_bit(state);
     dump_unprotected(state.match, image_base);
-    dump_unprotected(state.match2, image_base);
     auto tiddata = static_cast<_tiddata*>(
-        ::FlsGetValue(state.match2.tiddata_fls_index.get())
+        ::FlsGetValue(state.match.tiddata_fls_index.get())
     );
-    tiddata->_holdrand = state.match2.rand_seed;
+    tiddata->_holdrand = state.match.rand_seed;
     if (service)
     {
         for (const auto& fiber_state : state.fibers)
@@ -312,15 +331,14 @@ void revert_state(size_t image_base, game_state& state, fiber_mgmt::fiber_servic
 void save_current_state(size_t image_base, game_state& state, fiber_mgmt::fiber_service* service)
 {
     load(image_base, state.match);
-    load(image_base, state.match2);
     auto tiddata = static_cast<const _tiddata*>(
-        ::FlsGetValue(state.match2.tiddata_fls_index.get())
+        ::FlsGetValue(state.match.tiddata_fls_index.get())
     );
-    state.match2.rand_seed = tiddata->_holdrand;
+    state.match.rand_seed = tiddata->_holdrand;
     state.fibers.clear();
     if (service)
     {
-        for (const auto& f : state.match2.menu_fibers.get())
+        for (const auto& f : state.match.menu_fibers.get())
         {
             if (f.fiber)
             {
