@@ -35,19 +35,17 @@ namespace
 
 GGPOSession* g_session = nullptr;
 GGPOPlayerHandle g_player_handles[2];
-bool g_ggpo_frame_advance = false;
 size_t g_frame_base = 0;
 std::unordered_map<size_t, std::shared_ptr<game_state>> g_saved_state_map;
 size_t g_vs_2p_jmp_addr = 0;
 IGame* g_game = nullptr;
 configuration* g_cfg = nullptr;
-bool g_drawing_enabled = true;
 bool g_manual_frame_advance_enabled_backup = false;
 bool g_network_enabled = false;
 bool g_disconnected = false;
 std::string g_status_msg = "";
-std::optional<uint32_t> g_restore_frame;
 uint32_t g_timesync_frames = 0;
+bool g_status_displayed = false;
 
 
 #pragma warning(push)
@@ -98,8 +96,8 @@ bool begin_game(const char*)
 bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 {
     auto state_ptr = std::make_shared<game_state>(g_game->GetState());
-    LIBGG_LOG() << state_ptr->match2.frame.get() << std::endl;
-    assert(state_ptr->match2.frame.get() - g_frame_base == static_cast<size_t>(frame));
+    LIBGG_LOG() << state_ptr->match.frame.get() << std::endl;
+    assert(state_ptr->match.frame.get() - g_frame_base == static_cast<size_t>(frame));
 
     *buffer = (unsigned char*)state_ptr.get();
     *len = sizeof(game_state);
@@ -130,9 +128,8 @@ bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 bool load_game_state(unsigned char *buffer, int /* len */)
 {
     auto state_ptr = (game_state*)(buffer);
-    LIBGG_LOG() << state_ptr->match2.frame.get() << std::endl;
+    LIBGG_LOG() << state_ptr->match.frame.get() << std::endl;
     g_game->SetState(*state_ptr);
-    g_restore_frame.reset();
     return true;
 }
 
@@ -147,7 +144,7 @@ void free_buffer(void *buffer)
         return;
 
     auto state = (game_state*)buffer;
-    auto frame = state->match2.frame.get() - g_frame_base;
+    auto frame = state->match.frame.get() - g_frame_base;
     LIBGG_LOG() << frame << std::endl;
     if (g_cfg->get_args().synctest_frames == 0)
     {
@@ -170,14 +167,14 @@ void free_buffer(void *buffer)
 
 bool advance_frame(int)
 {
-    LIBGG_LOG() << std::endl;
-    if (g_drawing_enabled)
-        g_game->EnableDrawing(false);
-    g_ggpo_frame_advance = true;
-    g_game->GameTick();
-    if (g_drawing_enabled)
-        g_game->EnableDrawing(true);
-    g_ggpo_frame_advance = false;
+    int disconnected = 0;
+    IGame::input_t input{};
+    GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)&input, sizeof(input), &disconnected));
+    if (disconnected)
+        g_disconnected = true;
+    g_game->SetCachedInput(g_game->RemapInputFromDefault(input));
+    g_game->AdvanceFrame();
+    g_game->ProcessAudio();
     return true;
 }
 
@@ -206,6 +203,7 @@ bool on_event(GGPOEvent *info)
         break;
     case GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
         g_status_msg = "DISCONNECTED";
+        g_disconnected = true;
         break;
     case GGPO_EVENTCODE_TIMESYNC:
         g_timesync_frames = info->u.timesync.frames_ahead;
@@ -219,22 +217,8 @@ bool on_event(GGPOEvent *info)
 
 void prepare()
 {
-    // ggpo_idle() must be called instead of Sleep().
-    // In Steam release Sleep() is called just before IDirect3D::Present,
-    // but sometimes it's skipped, which is a problem.
-    // To be consistent with recommended implementation (VectorWar),
-    // ggpo_idle() should be called at the beginning of game tick,
-    // or at least before doing any processing for current frame.
-    // TODO: research, will this change game timing?
-    // 
-    // This disables limit_fps() function when it's called by the game.
-    // We will call it manually after getting current input data.
-    g_game->EnableFpsLimit(false);
-
-    g_frame_base = g_game->GetState().match2.frame.get();
-
+    g_frame_base = g_game->GetState().match.frame.get();
     g_saved_state_map.clear();
-
     g_manual_frame_advance_enabled_backup = g_cfg->get_manual_frame_advance_settings().enabled;
     g_cfg->get_manual_frame_advance_settings().enabled = false;
 }
@@ -313,7 +297,6 @@ void close_session()
 {
     assert(g_session);
 
-    g_game->EnableFpsLimit(g_drawing_enabled);
     g_cfg->get_manual_frame_advance_settings().enabled = g_manual_frame_advance_enabled_backup;
 
     GGPO_CHECK(ggpo_close_session(g_session));
@@ -331,139 +314,129 @@ void close_session()
     g_timesync_frames = 0;
 }
 
-void limit_fps(IGame* game)
+void display_status(IGame* game, const char* status)
 {
-    game->EnableFpsLimit(true);
-    game->LimitFps();
-    game->EnableFpsLimit(false);
+    game->WriteCockpitFont(status, 260, 460, 1, 0xff, 1);
 }
 
-bool input_data_hook(IGame* game)
+bool g_recursive_guard = false;
+bool after_read_input(IGame* game)
 {
     if (!g_session)
         return true;
 
-    // timeout argument isn't used for anything useful,
-    // so let's just set it to 0.
-    GGPO_CHECK(ggpo_idle(g_session, 0));
+    if (g_recursive_guard)
+        return true;
+
+    g_recursive_guard = true;
 
     IGame::input_t timesync_input{};
-    if (!g_ggpo_frame_advance && g_drawing_enabled)
+    if (g_timesync_frames > 0 && (g_game->GetState().match.frame.get() % 7 == 0))
     {
-        limit_fps(game);
-        if (g_timesync_frames > 0 && (g_game->GetState().match2.frame.get() % 7 == 0))
-        {
-            GGPO_CHECK(ggpo_idle(g_session, 0));
-            timesync_input = game->GetInputRemapped();
-            limit_fps(game);
-            --g_timesync_frames;
-            if (g_timesync_frames > 0)
-                g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
-            else
-                g_status_msg.clear();
-        }
+        timesync_input = game->RemapInputToDefault(game->GetCachedInput());
+        g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
+        game->DrawFrame();
+        game->Idle();
+        game->ReadInput();
+        --g_timesync_frames;
+        if (g_timesync_frames == 0)
+            g_status_msg.clear();
     }
 
-    auto input = game->GetInputRemapped();
+    IGame::input_t input = game->RemapInputToDefault(game->GetCachedInput());
     input[0] |= timesync_input[0];
     input[1] |= timesync_input[1];
-
-    if (g_restore_frame.has_value())
-    {
-        g_game->SetState(*g_saved_state_map.at(*g_restore_frame));
-    }
 
     const auto& network_args = g_cfg->get_args().network;
     if (network_args.side == 2)
         std::swap(input[0], input[1]);
 
-    GGPO_CHECK(ggpo_idle(g_session, 0));
-
-    const auto frame = g_game->GetState().match2.frame.get() - g_frame_base;
-    const auto found = g_saved_state_map.find(frame);
-    if (found == g_saved_state_map.end())
-    {
-        g_saved_state_map[frame] = std::make_shared<game_state>(game->GetState());
-    }
-
     GGPOErrorCode result = GGPO_OK;
-    if (!g_ggpo_frame_advance)
+    for (uint8_t side = 1; side <= 2; ++side)
     {
-        for (uint8_t side = 1; side <= 2; ++side)
+        if (!g_network_enabled || network_args.side == side)
         {
-            if (!g_network_enabled || network_args.side == side)
-            {
-                result = ggpo_add_local_input(g_session, g_player_handles[side-1], (void*)&input[side-1], 2);
-            }
+            result = ggpo_add_local_input(g_session, g_player_handles[side-1], (void*)&input[side-1], 2);
         }
     }
-    if (GGPO_SUCCEEDED(result))
+
+    if (result != GGPO_ERRORCODE_NOT_SYNCHRONIZED && result != GGPO_ERRORCODE_PREDICTION_THRESHOLD)
     {
+        GGPO_CHECK(result);
         int disconnected = 0;
-        result = ggpo_synchronize_input(g_session, (void*)&input, 4, &disconnected);
-        if (GGPO_SUCCEEDED(result) && !g_ggpo_frame_advance)
-        {
-            LIBGG_LOG() << "ggpo_synchronize_input" << std::endl;
-            g_restore_frame.reset();
-        }
+        GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)&input, 4, &disconnected));
         if (disconnected)
             g_disconnected = true;
     }
-
-    if (!GGPO_SUCCEEDED(result))
+    else
     {
-        if (!g_restore_frame.has_value())
-        {
-            g_restore_frame = frame;
-            LIBGG_LOG() << "g_restore_frame=" << frame << std::endl;
-        }
-        input = IGame::input_t{};
+        input = {};
+        game->DrawFrame();
+        game->AbortCurrentFrame();
     }
 
-    game->SetInputRemapped(input);
+    game->SetCachedInput(game->RemapInputFromDefault(input));
+
+    g_recursive_guard = false;
 
     return true;
 }
 
-bool game_tick_end_hook(IGame*)
+// this callback can be called recursively, but no more than 2 calls deep
+bool after_advance_frame(IGame*)
 {
-    if (!g_session)
+    if (g_session)
     {
-        if (g_network_enabled)
-        {
-            start_ggpo_session();
-        }
-        else if (g_cfg->get_args().synctest_frames)
-        {
-            start_ggpo_synctest();
-        }
-        return true;
-    }
-
-    if (!g_restore_frame.has_value() || !g_network_enabled || g_ggpo_frame_advance)
-    {
-        LIBGG_LOG() << "advance_frame" <<  std::endl;
         GGPO_CHECK(ggpo_advance_frame(g_session));
     }
 
-    if (!g_ggpo_frame_advance)
-    {
-        if (g_disconnected)
-        {
-            close_session();
-            return true;
-        }
-    }
+    g_status_displayed = false;
 
     return true;
 }
 
-bool process_objects_hook(IGame* game)
+bool idle(IGame* game)
 {
-    if (!g_status_msg.empty())
+    if (!g_session)
+        return true;
+    int timeout = std::clamp(game->MsTillNextFrame(), 0, 3);
+    if (timeout > 0)
+        ggpo_idle(g_session, timeout);
+    return true;
+}
+
+bool before_draw_frame(IGame* game)
+{
+    if (!g_status_displayed && !g_status_msg.empty())
     {
-        game->WriteCockpitFont(g_status_msg.c_str(), 260, 460, 1, 0xff, 1);
+        g_status_displayed = true;
+        display_status(game, g_status_msg.c_str());
     }
+    return true;
+}
+
+bool after_draw_frame(IGame*)
+{
+    if (g_recursive_guard)
+    {
+        // called by during ReadInput callback
+        // close_session should not be called during ReadInput
+        return true;
+    }
+
+    if (!g_session)
+    {
+        if (g_network_enabled)
+            start_ggpo_session();
+        else if (g_cfg->get_args().synctest_frames)
+            start_ggpo_synctest();
+    }
+    else
+    {
+        if (g_disconnected)
+            close_session();
+    }
+
     return true;
 }
 
@@ -471,11 +444,12 @@ bool process_objects_hook(IGame* game)
 
 void Initialize(IGame* game, configuration* cfg)
 {
-    game->RegisterCallback(IGame::Event::AfterGetInput, input_data_hook);
-    game->RegisterCallback(IGame::Event::AfterGameTick, game_tick_end_hook);
-    game->RegisterCallback(IGame::Event::AfterProcessObjects, process_objects_hook);
+    game->RegisterCallback(IGame::Event::AfterReadInput, after_read_input);
+    game->RegisterCallback(IGame::Event::AfterAdvanceFrame, after_advance_frame);
+    game->RegisterCallback(IGame::Event::BeforeDrawFrame, before_draw_frame);
+    game->RegisterCallback(IGame::Event::AfterDrawFrame, after_draw_frame);
+    game->RegisterCallback(IGame::Event::Idle, idle);
     apply_patches(game->GetImageBase());
-    g_drawing_enabled = game->IsDrawingEnabled();
     g_game = game;
     g_cfg = cfg;
 }

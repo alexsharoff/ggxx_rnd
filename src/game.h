@@ -18,6 +18,7 @@ struct IGame
         BeforeAdvanceFrame,
         AfterAdvanceFrame,
         BeforeDrawFrame,
+        AfterDrawFrame,
         Idle,
         BeforePlaySound,
         AfterReadInput
@@ -72,6 +73,9 @@ struct IGame
     virtual void ProcessAudio() = 0;
     virtual void RunSteamCallbacks() = 0;
     virtual void RestartIfRequested() = 0;
+
+    virtual void AbortCurrentFrame() = 0;
+    virtual bool IsCurrentFrameAborted() const = 0;
 
     virtual const std::pair<IXACT3WaveBank*, int16_t>& GetCurrentSound() const = 0;
     virtual size_t GetImageBase() const = 0;

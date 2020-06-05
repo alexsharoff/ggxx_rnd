@@ -308,7 +308,7 @@ bool before_draw_frame(IGame* game)
 }
 
 // TODO: this function is kind of a mess, split/simplify
-bool input_hook(IGame* game)
+bool input_hook_record(IGame* game)
 {
     if (!g_recorder.initial_frame.has_value())
         g_recorder.initial_frame = game->GetState().match.frame.get();
@@ -505,18 +505,6 @@ bool input_hook(IGame* game)
                 }
             }
         }
-        if (g_recorder.recording)
-        {
-            const auto frame = game->GetState().match.frame.get() - *g_recorder.initial_frame;
-            if (g_recorder.history.size() <= frame)
-                g_recorder.history.resize(frame + 1);
-            g_recorder.history[frame] = input;
-            std::wstring error;
-            if (!update_replay_file(error, game))
-            {
-                std::wcerr << error.c_str() << std::endl;
-            }
-        }
     }
 
     if (g_frame_advance.history_idx.has_value() || g_recorder.playing)
@@ -539,8 +527,24 @@ bool input_hook(IGame* game)
     return true;
 }
 
-bool process_objects_hook(IGame* game)
+bool after_advance_frame(IGame* game)
 {
+    if (g_recorder.recording)
+    {
+        // Replay logic:
+        auto input = game->RemapInputToDefault(game->GetCachedInput());
+
+        const auto frame = game->GetState().match.frame.get() - *g_recorder.initial_frame;
+        if (g_recorder.history.size() <= frame)
+            g_recorder.history.resize(frame + 1);
+        g_recorder.history[frame] = input;
+        std::wstring error;
+        if (!update_replay_file(error, game))
+        {
+            std::wcerr << error.c_str() << std::endl;
+        }
+    }
+
     match_state ms;
     if (g_frame_advance.history_idx.has_value())
     {
@@ -632,8 +636,8 @@ void Initialize(IGame* game, configuration* cfg)
         }
     }
 
-    game->RegisterCallback(IGame::Event::AfterReadInput, input_hook);
-    game->RegisterCallback(IGame::Event::AfterAdvanceFrame, process_objects_hook);
+    game->RegisterCallback(IGame::Event::AfterReadInput, input_hook_record, IGame::CallbackPosition::First);
+    game->RegisterCallback(IGame::Event::AfterAdvanceFrame, after_advance_frame);
     game->RegisterCallback(IGame::Event::BeforeDrawFrame, before_draw_frame);
 }
 

@@ -35,11 +35,14 @@ void gg_main_loop()
     if (!g_game->Idle())
     {
         g_game->ReadInput();
-        g_game->AdvanceFrame();
-        g_game->DrawFrame();
-        g_game->ProcessAudio();
-        g_game->RunSteamCallbacks();
-        g_game->RestartIfRequested();
+        if (!g_game->IsCurrentFrameAborted())
+        {
+            g_game->AdvanceFrame();
+            g_game->DrawFrame();
+            g_game->ProcessAudio();
+            g_game->RunSteamCallbacks();
+            g_game->RestartIfRequested();
+        }
     }
 }
 
@@ -255,6 +258,12 @@ public:
         }
 
         UpdateFpsTimestamps();
+
+        for (const auto& func : m_callbacks[IGame::Event::AfterDrawFrame])
+        {
+            if (!func(this))
+                break;
+        }
     }
 
     void UpdateFpsTimestamps()
@@ -569,6 +578,8 @@ public:
 
     bool Idle() final
     {
+        m_frame_aborted = false;
+
         for (auto func : m_callbacks[IGame::Event::Idle])
         {
             if (!func(this))
@@ -598,6 +609,16 @@ public:
         if (flag == 0)
             return;
         m_globals_orig.restart_process_func();
+    }
+
+    void AbortCurrentFrame() final
+    {
+        m_frame_aborted = true;
+    }
+
+    bool IsCurrentFrameAborted() const final
+    {
+        return m_frame_aborted;
     }
 
     const std::pair<IXACT3WaveBank*, int16_t>& GetCurrentSound() const final
@@ -640,6 +661,7 @@ private:
     size_t m_image_base = 0;
     bool m_ready = false;
     input_t m_input;
+    bool m_frame_aborted = false;
     size_t m_fps_timestamp_idx = 0;
     std::array<uint64_t, 0x20> m_fps_timestamps = { 0 };
 
