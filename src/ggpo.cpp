@@ -339,12 +339,12 @@ bool after_read_input(IGame* game)
     g_recursive_guard = true;
 
     IGame::input_t timesync_input{};
-    if (!g_ggpo_synchronized && g_timesync_frames > 0 && (g_game->GetState().match.frame.get() % 7 == 0))
+    if (g_ggpo_synchronized && g_timesync_frames > 0 && (g_game->GetState().match.frame.get() % 7 == 0))
     {
         timesync_input = game->RemapInputToDefault(game->GetCachedInput());
         g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
         game->DrawFrame();
-        game->Idle();
+        while (game->Idle()) {}
         game->ReadInput();
         --g_timesync_frames;
     }
