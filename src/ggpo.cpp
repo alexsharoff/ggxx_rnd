@@ -46,6 +46,7 @@ bool g_disconnected = false;
 std::string g_status_msg = "";
 uint32_t g_timesync_frames = 0;
 bool g_status_displayed = false;
+bool g_ggpo_synchronized = false;
 
 
 #pragma warning(push)
@@ -191,6 +192,7 @@ bool on_event(GGPOEvent *info)
         break;
     case GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER:
         g_status_msg = "SYNCHRONIZED";
+        g_ggpo_synchronized = true;
         break;
     case GGPO_EVENTCODE_RUNNING:
         g_status_msg = "";
@@ -312,6 +314,7 @@ void close_session()
     g_disconnected = false;
     g_status_msg = "SESSION CLOSED";
     g_timesync_frames = 0;
+    g_ggpo_synchronized = false;
 }
 
 void display_status(IGame* game, const char* status)
@@ -411,6 +414,14 @@ bool before_draw_frame(IGame* game)
     {
         g_status_displayed = true;
         display_status(game, g_status_msg.c_str());
+    }
+
+    if (g_session && g_ggpo_synchronized && game->GetState().match.frame.get() % 60 == 0)
+    {
+        auto side = g_cfg->get_args().network.side;
+        GGPONetworkStats stats{};
+        GGPO_CHECK(ggpo_get_network_stats(g_session, g_player_handles[side == 1 ? 1: 0], &stats));
+        g_status_msg = "PING " + std::to_string(stats.network.ping);
     }
     return true;
 }
