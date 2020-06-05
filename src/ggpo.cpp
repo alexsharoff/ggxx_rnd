@@ -23,7 +23,7 @@
         const auto res___ = expr; \
         if (!GGPO_SUCCEEDED(res___)) { \
             std::cerr << __FILE__ << ':' << __LINE__ << ": " << #expr << " == " << res___ << std::endl; \
-            throw std::logic_error("ggpo error"); \
+            throw std::logic_error("GGPO error"); \
         } \
     } while(false)
 
@@ -168,6 +168,7 @@ void free_buffer(void *buffer)
 
 bool advance_frame(int)
 {
+    LIBGG_LOG() << std::endl;
     int disconnected = 0;
     IGame::input_t input{};
     GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)&input, sizeof(input), &disconnected));
@@ -199,9 +200,11 @@ bool on_event(GGPOEvent *info)
         break;
     case GGPO_EVENTCODE_CONNECTION_INTERRUPTED:
         g_status_msg = "CONNECTION INTERRUPTED";
+        g_ggpo_synchronized = false;
         break;
     case GGPO_EVENTCODE_CONNECTION_RESUMED:
         g_status_msg = "CONNECTION RESUMED";
+        g_ggpo_synchronized = true;
         break;
     case GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
         g_status_msg = "DISCONNECTED";
@@ -328,13 +331,15 @@ bool after_read_input(IGame* game)
     if (!g_session)
         return true;
 
+    LIBGG_LOG() << "g_recursive_guard=" << g_recursive_guard << std::endl;
+
     if (g_recursive_guard)
         return true;
 
     g_recursive_guard = true;
 
     IGame::input_t timesync_input{};
-    if (g_timesync_frames > 0 && (g_game->GetState().match.frame.get() % 7 == 0))
+    if (!g_ggpo_synchronized && g_timesync_frames > 0 && (g_game->GetState().match.frame.get() % 7 == 0))
     {
         timesync_input = game->RemapInputToDefault(game->GetCachedInput());
         g_status_msg = "TIMESYNC " + std::to_string(g_timesync_frames);
@@ -342,8 +347,6 @@ bool after_read_input(IGame* game)
         game->Idle();
         game->ReadInput();
         --g_timesync_frames;
-        if (g_timesync_frames == 0)
-            g_status_msg.clear();
     }
 
     IGame::input_t input = game->RemapInputToDefault(game->GetCachedInput());
@@ -390,6 +393,7 @@ bool after_advance_frame(IGame*)
 {
     if (g_session)
     {
+        LIBGG_LOG() << std::endl;
         GGPO_CHECK(ggpo_advance_frame(g_session));
     }
 
@@ -403,6 +407,7 @@ bool idle(IGame* game)
     if (!g_session)
         return true;
     int timeout = std::clamp(game->MsTillNextFrame(), 0, 3);
+    LIBGG_LOG() << "timeout=" << timeout << std::endl;
     if (timeout > 0)
         ggpo_idle(g_session, timeout);
     return true;
@@ -416,7 +421,12 @@ bool before_draw_frame(IGame* game)
         display_status(game, g_status_msg.c_str());
     }
 
-    if (g_session && g_ggpo_synchronized && game->GetState().match.frame.get() % 60 == 0)
+    if (!g_session)
+        return true;
+
+    LIBGG_LOG() << std::endl;
+
+    if (g_ggpo_synchronized && game->GetState().match.frame.get() % 60 == 0)
     {
         auto side = g_cfg->get_args().network.side;
         GGPONetworkStats stats{};
@@ -434,6 +444,8 @@ bool after_draw_frame(IGame*)
         // close_session should not be called during ReadInput
         return true;
     }
+
+    LIBGG_LOG() << std::endl;
 
     if (!g_session)
     {

@@ -1,13 +1,42 @@
 #pragma once
 
+#include <fstream>
 #include <iostream>
+#include <string>
 #include <system_error>
+#include "time.h"
 #include <type_traits>
 #include <utility>
+#include <Windows.h>
 
 
-#ifdef LIBGG_LOG_ENABLE
-#define LIBGG_LOG() std::cout << __FUNCTION__ << ": "
+#define LIBGG_LOG_PREFIX '[' << time(0) << "] " << __FUNCTION__ << ": "
+
+#ifdef LIBGG_LOG_CONSOLE
+#define LIBGG_LOG() std::cout << LIBGG_LOG_PREFIX
+#elif defined(LIBGG_LOG_FILE)
+namespace
+{
+struct file_log_t
+{
+    file_log_t()
+    {
+        const auto fname = "libgg." + std::to_string(::GetCurrentProcessId()) + ".log";
+        m_ofs.open(fname.c_str());
+    }
+    ~file_log_t()
+    {
+        m_ofs.close();
+    }
+    std::ostream& get()
+    {
+        return m_ofs;
+    }
+private:
+    std::ofstream m_ofs;
+} g_log;
+}
+#define LIBGG_LOG() g_log.get() << LIBGG_LOG_PREFIX
 #else
 namespace
 {

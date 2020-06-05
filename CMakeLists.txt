@@ -54,7 +54,7 @@ add_library(libgg SHARED
     src/unattended.cpp
 )
 target_link_libraries(libgg GGPO libgg.static Shlwapi)
-target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_ENABLE>)
+target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_FILE>)
 
 add_subdirectory(src/steam_api_nop)
 
