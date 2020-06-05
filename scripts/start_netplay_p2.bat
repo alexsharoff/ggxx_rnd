@@ -7,4 +7,4 @@ if not exist "%gg_path%" (
     exit /b 1
 )
 
-start /wait %gg_path% /gamemode network /remoteip remote_ip_here /remoteport remote_port_here /localport your_port_here /side 2
+start /wait %gg_path% /gamemode network /remoteip 127.0.0.1 /remoteport 7500 /localport 7501 /side 2

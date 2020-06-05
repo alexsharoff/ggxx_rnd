@@ -298,7 +298,7 @@ bool update_replay_file(std::wstring& error, IGame* game)
 
 bool before_draw_frame(IGame* game)
 {
-    if (g_frame_advance.expected_fps != 60)
+    if (g_frame_advance.expected_fps != 60 && !g_frame_advance.history_idx.has_value())
     {
         auto ratio = g_frame_advance.expected_fps / 60;
         if (ratio > 1 && game->GetState().match.frame % ratio != 0)
@@ -545,7 +545,6 @@ bool after_advance_frame(IGame* game)
         }
     }
 
-    match_state ms;
     if (g_frame_advance.history_idx.has_value())
     {
         const auto& controller_state = game->GetState().match.controller_state.get();
@@ -568,6 +567,18 @@ bool after_advance_frame(IGame* game)
         auto str = "FRAME " + std::to_string(frame);
         game->WriteCockpitFont(str.c_str(), 275, 440, 1, 0xFF, 1);
     }
+    else
+    {
+        if (g_frame_advance.expected_fps != 60)
+        {
+            std::string speed_status;
+            if (g_frame_advance.expected_fps > 60)
+                speed_status = "SPEED X" + std::to_string(g_frame_advance.expected_fps / 60);
+            else
+                speed_status = "SPEED /" + std::to_string(60 / g_frame_advance.expected_fps);
+            game->WriteCockpitFont(speed_status.c_str(), 270, 440, 1, 0xff, 1);
+        }
+    }
     if (g_recorder.playing)
     {
         game->WriteCockpitFont("REPLAY", 285, 100, 1, 0xFF, 1);
@@ -580,20 +591,6 @@ bool after_advance_frame(IGame* game)
     if (g_frame_advance.out_of_memory)
     {
         game->WriteCockpitFont("OUT OF MEMORY!", 230, 440, 1, 0xff, 1);
-    }
-
-    if (g_frame_advance.expected_fps != 60)
-    {
-        std::string speed_status;
-        if (g_frame_advance.expected_fps > 60)
-        {
-            speed_status = "SPEED X" + std::to_string(g_frame_advance.expected_fps / 60);
-        }
-        else
-        {
-            speed_status = "SPEED /" + std::to_string(60 / g_frame_advance.expected_fps);
-        }
-        game->WriteCockpitFont(speed_status.c_str(), 270, 440, 1, 0xff, 1);
     }
 
     return true;
