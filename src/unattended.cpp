@@ -29,6 +29,7 @@ void Initialize(IGame* game, configuration* cfg)
         memory_dump::dump(showwindow_cmd, game->GetImageBase() + 0x1473B6);
 
         game->RegisterCallback(IGame::Event::BeforeDrawFrame, before_draw_frame);
+        game->SetFpsLimit(0);
     }
 }
 

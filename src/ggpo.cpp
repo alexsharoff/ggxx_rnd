@@ -47,6 +47,7 @@ std::string g_status_msg = "";
 uint32_t g_timesync_frames = 0;
 bool g_status_displayed = false;
 bool g_ggpo_synchronized = false;
+bool g_ggpo_force_idle = true;
 
 
 #pragma warning(push)
@@ -97,7 +98,7 @@ bool begin_game(const char*)
 bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 {
     auto state_ptr = std::make_shared<game_state>(g_game->GetState());
-    LIBGG_LOG() << state_ptr->match.frame.get() << std::endl;
+    LIBGG_LOG() << state_ptr->match.frame.get() - g_frame_base << std::endl;
     assert(state_ptr->match.frame.get() - g_frame_base == static_cast<size_t>(frame));
 
     *buffer = (unsigned char*)state_ptr.get();
@@ -129,7 +130,7 @@ bool save_game_state(unsigned char **buffer, int *len, int *checksum, int frame)
 bool load_game_state(unsigned char *buffer, int /* len */)
 {
     auto state_ptr = (game_state*)(buffer);
-    LIBGG_LOG() << state_ptr->match.frame.get() << std::endl;
+    LIBGG_LOG() << state_ptr->match.frame.get() - g_frame_base << std::endl;
     g_game->SetState(*state_ptr);
     return true;
 }
@@ -176,7 +177,6 @@ bool advance_frame(int)
         g_disconnected = true;
     g_game->SetCachedInput(g_game->RemapInputFromDefault(input));
     g_game->AdvanceFrame();
-    g_game->ProcessAudio();
     return true;
 }
 
@@ -226,6 +226,7 @@ void prepare()
     g_saved_state_map.clear();
     g_manual_frame_advance_enabled_backup = g_cfg->get_manual_frame_advance_settings().enabled;
     g_cfg->get_manual_frame_advance_settings().enabled = false;
+    g_ggpo_force_idle = true;
 }
 
 void start_ggpo_synctest()
@@ -353,6 +354,14 @@ bool after_read_input(IGame* game)
     input[0] |= timesync_input[0];
     input[1] |= timesync_input[1];
 
+    if (g_cfg->get_args().synctest_frames)
+    {
+        const auto frame = g_game->GetState().match.frame.get() - g_frame_base;
+        const auto found = g_saved_state_map.find(frame);
+        if (found == g_saved_state_map.end())
+            g_saved_state_map[frame] = std::make_shared<game_state>(game->GetState());
+    }
+
     const auto& network_args = g_cfg->get_args().network;
     if (network_args.side == 2)
         std::swap(input[0], input[1]);
@@ -376,6 +385,7 @@ bool after_read_input(IGame* game)
     }
     else
     {
+        assert(g_network_enabled);
         input = {};
         game->DrawFrame();
         game->AbortCurrentFrame();
@@ -384,6 +394,7 @@ bool after_read_input(IGame* game)
     game->SetCachedInput(game->RemapInputFromDefault(input));
 
     g_recursive_guard = false;
+    g_ggpo_force_idle = true;
 
     return true;
 }
@@ -407,9 +418,12 @@ bool idle(IGame* game)
     if (!g_session)
         return true;
     int timeout = std::clamp(game->MsTillNextFrame(), 0, 3);
-    LIBGG_LOG() << "timeout=" << timeout << std::endl;
-    if (timeout > 0)
+    LIBGG_LOG() << "timeout=" << timeout << ", g_ggpo_force_idle=" << g_ggpo_force_idle << std::endl;
+    if (g_ggpo_force_idle || timeout > 0)
+    {
         ggpo_idle(g_session, timeout);
+        g_ggpo_force_idle = false;
+    }
     return true;
 }
 

@@ -141,7 +141,7 @@ public:
         m_fps = fps;
     }
 
-    uint32_t GetFpsLimit(uint32_t) const final
+    uint32_t GetFpsLimit() const final
     {
         return m_fps;
     }
@@ -221,22 +221,28 @@ public:
         m_input[0] = input.keys[0];
         m_input[1] = input.keys[1];
 
-        for (const auto& func : m_callbacks[IGame::Event::AfterReadInput])
+        if (m_ready)
         {
-            if (!func(this))
-                break;
+            for (const auto& func : m_callbacks[IGame::Event::AfterReadInput])
+            {
+                if (!func(this))
+                    break;
+            }
         }
     }
 
     void DrawFrame() final
     {
         bool skip = false;
-        for (const auto& func : m_callbacks[IGame::Event::BeforeDrawFrame])
+        if (m_ready)
         {
-            if (!func(this))
+            for (const auto& func : m_callbacks[IGame::Event::BeforeDrawFrame])
             {
-                skip = true;
-                break;
+                if (!func(this))
+                {
+                    skip = true;
+                    break;
+                }
             }
         }
 
@@ -259,10 +265,13 @@ public:
 
         UpdateFpsTimestamps();
 
-        for (const auto& func : m_callbacks[IGame::Event::AfterDrawFrame])
+        if (m_ready)
         {
-            if (!func(this))
-                break;
+            for (const auto& func : m_callbacks[IGame::Event::AfterDrawFrame])
+            {
+                if (!func(this))
+                    break;
+            }
         }
     }
 
@@ -285,6 +294,9 @@ public:
     {
         auto func = m_globals_orig.process_audio_func.get();
         func();
+
+        if (!m_ready && LateInitialize())
+            m_ready = true;
     }
 
     void RunSteamCallbacks() final
@@ -513,59 +525,59 @@ public:
         return false;
     }
 
+    bool LateInitialize()
+    {
+        decltype(match_state::menu_fibers) fibers;
+        load(m_image_base, fibers);
+        const auto& fiber_data = fibers.get()[0];
+        // wait until the game has loaded (ie Loading fiber has exited)
+        const auto is_loading = fiber_data.name == std::string_view("ATLD");
+        if (!is_loading && InitializeRemainingHooks())
+        {
+            if (!g_fiber_service)
+                g_fiber_service = fiber_mgmt::fiber_service::start();
+
+            EnableRngAutoIncrement(true);
+
+            save_current_state(m_image_base, m_state);
+
+            // Reset game clock to zero, we'll be using it as frame counter
+            // Also, same game state with different clock values may produce
+            // different results (IK animation timings, wake-up timings?)
+            m_state.match.frame = 0;
+            dump_unprotected(m_state.match.frame, m_image_base);
+
+            return true;
+        }
+        return false;
+    }
+
     void AdvanceFrame() final
     {
-        if (!m_ready)
+        if (m_ready)
         {
-            decltype(match_state::menu_fibers) fibers;
-            load(m_image_base, fibers);
-            const auto& fiber_data = fibers.get()[0];
-            // wait until the game has loaded (ie Loading fiber has exited)
-            const auto is_loading = fiber_data.name == std::string_view("ATLD");
-            if (!is_loading && InitializeRemainingHooks())
+            for (const auto& func : m_callbacks[IGame::Event::BeforeAdvanceFrame])
             {
-                if (!g_fiber_service)
-                    g_fiber_service = fiber_mgmt::fiber_service::start();
-
-                m_ready = true;
-
-                EnableRngAutoIncrement(true);
-
-                save_current_state(m_image_base, m_state);
-
-                // Reset game clock to zero, we'll be using it as frame counter
-                // Also, same game state with different clock values may produce
-                // different results (IK animation timings, wake-up timings?)
-                m_state.match.frame = 0;
-                dump_unprotected(m_state.match.frame, m_image_base);
+                if (!func(this))
+                    return;
             }
-            else
-            {
-                const auto f = *m_globals_orig.gg_main_loop_func.get();
-                f();
-                return;
-            }
-        }
-
-        for (const auto& func : m_callbacks[IGame::Event::BeforeAdvanceFrame])
-        {
-            if (!func(this))
-                return;
         }
 
         const auto f = *m_globals_orig.gg_main_loop_func.get();
         f();
 
-        // before reading game state, wait for background workers
-        // TODO: wait for sound file reader too?
-        m_globals_orig.wait_file_readers();
-
-        save_current_state(m_image_base, m_state, g_fiber_service.get());
-
-        for (const auto& func : m_callbacks[IGame::Event::AfterAdvanceFrame])
+        if (m_ready)
         {
-            if (!func(this))
-                break;
+            // before reading game state, wait for background workers
+            m_globals_orig.wait_file_readers();
+            m_globals_orig.xaudio_read_pending_files(*reinterpret_cast<void**>(m_image_base + 0x556020));
+
+            save_current_state(m_image_base, m_state, g_fiber_service.get());
+            for (const auto& func : m_callbacks[IGame::Event::AfterAdvanceFrame])
+            {
+                if (!func(this))
+                    break;
+            }
         }
     }
 
@@ -580,26 +592,37 @@ public:
     {
         m_frame_aborted = false;
 
-        for (auto func : m_callbacks[IGame::Event::Idle])
+        if (m_ready)
         {
-            if (!func(this))
-                return true;
+            for (auto func : m_callbacks[IGame::Event::Idle])
+            {
+                if (!func(this))
+                    return true;
+            }
         }
 
         const auto now = std::chrono::high_resolution_clock::now();
-        bool still_idle = now < m_next_frame;
-        if (!still_idle)
+        if (m_fps)
         {
-            std::chrono::nanoseconds increment = std::chrono::seconds(1);
-            increment /= m_fps;
-            auto fps = GetCurrentFps();
-            uint32_t delta = std::max(m_fps / 60, 1u);
-            if (fps + delta < m_fps)
-                m_next_frame = now + increment;
-            else
-                m_next_frame += increment;
+            bool still_idle = now < m_next_frame;
+            if (!still_idle)
+            {
+                std::chrono::nanoseconds increment = std::chrono::seconds(1);
+                increment /= m_fps;
+                auto fps = GetCurrentFps();
+                uint32_t delta = std::max(m_fps / 60, 1u);
+                if (fps + delta < m_fps)
+                    m_next_frame = now + increment;
+                else
+                    m_next_frame += increment;
+            }
+            return still_idle;
         }
-        return still_idle;
+        else
+        {
+            m_next_frame = now;
+            return false;
+        }
     }
 
     void RestartIfRequested() final
@@ -709,14 +732,17 @@ private:
 int32_t play_sound_impl(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_t a4, int8_t a5, IXACT3Wave** a6)
 {
     auto game = dynamic_cast<Game*>(g_game);
-    game->m_sound = { a1, a2 };
-    for (const auto& func : game->m_callbacks[IGame::Event::BeforePlaySound])
+    if (game->m_ready)
     {
-        if (!func(g_game))
+        game->m_sound = { a1, a2 };
+        for (const auto& func : game->m_callbacks[IGame::Event::BeforePlaySound])
         {
-            *a6 = &g_empty_wave;
-            game->m_sound = { nullptr, static_cast<int16_t>(0) };
-            return 0;
+            if (!func(g_game))
+            {
+                *a6 = &g_empty_wave;
+                game->m_sound = { nullptr, static_cast<int16_t>(0) };
+                return 0;
+            }
         }
     }
 

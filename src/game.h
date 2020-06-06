@@ -33,7 +33,7 @@ struct IGame
     virtual void EnablePauseMenu(bool enable) = 0;
 
     virtual void SetFpsLimit(uint32_t fps) = 0;
-    virtual uint32_t GetFpsLimit(uint32_t) const = 0;
+    virtual uint32_t GetFpsLimit() const = 0;
     virtual uint32_t GetCurrentFps() const = 0;
 
     virtual const game_state& GetState() const = 0;

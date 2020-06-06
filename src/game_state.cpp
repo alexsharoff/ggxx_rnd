@@ -280,6 +280,7 @@ void load_global_data(size_t image_base, gg_globals& state)
     state.player_status_ticker = reinterpret_cast<player_status_ticker_func_t*>(image_base + 0x10E190);
     state.wait_file_readers = reinterpret_cast<wait_file_readers_func_t*>(image_base + 0x4B980);
     state.restart_process_func = reinterpret_cast<restart_process_func_t*>(image_base + 0x1464F0);
+    state.xaudio_read_pending_files = reinterpret_cast<xaudio_read_pending_files_func_t*>(image_base + 0x233710);
 }
 
 void dump_global_data(size_t memory_base, const gg_globals& state)

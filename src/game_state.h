@@ -596,6 +596,7 @@ typedef void (draw1_func_t)(int);
 typedef void (draw2_func_t)();
 typedef uint32_t (get_current_fps_func_t)();
 typedef void (restart_process_func_t)();
+typedef void (__stdcall xaudio_read_pending_files_func_t)(void*);
 struct IXACT3WaveBank;
 struct IXACT3Wave;
 // IXACT3WaveBank_Play(__in IXACT3WaveBank* pWaveBank, XACTINDEX nWaveIndex, DWORD dwFlags, DWORD dwPlayOffset, XACTLOOPCOUNT nLoopCount, __deref_out IXACT3Wave** ppWave)
@@ -667,6 +668,7 @@ typedef void (draw_arrow_func_t)(
 
 // forward-declaration
 struct IDirect3DDevice9;
+struct IXAudio;
 
 struct gg_globals
 {
@@ -702,6 +704,7 @@ struct gg_globals
     player_status_ticker_func_t* player_status_ticker = nullptr;
     wait_file_readers_func_t* wait_file_readers = nullptr;
     restart_process_func_t* restart_process_func = nullptr;
+    xaudio_read_pending_files_func_t* xaudio_read_pending_files = nullptr;
 
     memory_offset<IDirect3DDevice9**, 0x555B94> direct3d9;
     memory_offset<HWND, 0x506554> hwnd;
