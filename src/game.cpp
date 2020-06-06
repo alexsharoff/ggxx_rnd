@@ -605,6 +605,11 @@ public:
         if (m_fps)
         {
             bool still_idle = now < m_next_frame;
+            if (still_idle)
+            {
+                if (m_next_frame - now < std::chrono::microseconds(500))
+                    still_idle = false;
+            }
             if (!still_idle)
             {
                 std::chrono::nanoseconds increment = std::chrono::seconds(1);
