@@ -387,7 +387,8 @@ bool after_read_input(IGame* game)
     {
         assert(g_network_enabled);
         input = {};
-        game->DrawFrame();
+        // Keep redrawing, but don't update FPS timestamps
+        game->DrawFrame(false);
         game->AbortCurrentFrame();
     }
 
@@ -445,7 +446,8 @@ bool before_draw_frame(IGame* game)
         auto side = g_cfg->get_args().network.side;
         GGPONetworkStats stats{};
         GGPO_CHECK(ggpo_get_network_stats(g_session, g_player_handles[side == 1 ? 1: 0], &stats));
-        g_status_msg = "PING " + std::to_string(stats.network.ping);
+        if (stats.network.ping >= 0 && stats.network.ping < 3000)
+            g_status_msg = "PING " + std::to_string(stats.network.ping);
     }
     return true;
 }

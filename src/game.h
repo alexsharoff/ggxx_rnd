@@ -69,7 +69,7 @@ struct IGame
     virtual bool Idle() = 0;
     virtual void ReadInput() = 0;
     virtual void AdvanceFrame() = 0;
-    virtual void DrawFrame() = 0;
+    virtual void DrawFrame(bool update_fps_timestamps = true) = 0;
     virtual void ProcessAudio() = 0;
     virtual void RunSteamCallbacks() = 0;
     virtual void RestartIfRequested() = 0;

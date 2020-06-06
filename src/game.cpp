@@ -231,7 +231,7 @@ public:
         }
     }
 
-    void DrawFrame() final
+    void DrawFrame(bool update_fps_timestamps) final
     {
         bool skip = false;
         if (m_ready)
@@ -263,7 +263,8 @@ public:
             f();
         }
 
-        UpdateFpsTimestamps();
+        if (update_fps_timestamps)
+            UpdateFpsTimestamps();
 
         if (m_ready)
         {
