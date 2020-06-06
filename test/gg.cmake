@@ -203,4 +203,10 @@ foreach(synctest_frames 1 2 3 4 5 6 7 8)
         ARGS ${args}
         TIMEOUT 600
     )
+    add_gg_test(
+        NAME 159146397416240.ggr.${synctest_frames}f
+        REPLAY matches/159146397416240.ggr
+        ARGS ${args}
+        TIMEOUT 400
+    )
 endforeach()
