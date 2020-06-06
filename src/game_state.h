@@ -503,6 +503,11 @@ struct _match_state_3
     // at :base+59692
     // not sure if this is needed
     memory_offset<uint32_t, 0x51B17C> unknown30;
+
+    // test/replays/matches/159085566112348.ggr (synctest 1f, frame 1008)
+    // inside call at :base+1457BC
+    // rng desync
+    ptr_chain<std::array<uint32_t, 0x230>, 0x5066E4, 0> unknown31;
 };
 
 // split match_state into multiple structs to avoid 'compiler out of heap' errors
