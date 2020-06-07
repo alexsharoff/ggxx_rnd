@@ -2,7 +2,7 @@
 #include "sound_fix.h"
 #include "util.h"
 
-#include <unordered_map>
+#include <array>
 #include <unordered_set>
 
 
@@ -26,7 +26,13 @@ struct pair_hash
     }
 };
 using sound_set_t = std::unordered_set<std::pair<const IXACT3WaveBank*, int16_t>, pair_hash>;
-std::unordered_map<size_t, sound_set_t> g_heard_sounds;
+struct SoundAccounting
+{
+    uint32_t frame;
+    sound_set_t sounds;
+};
+// keep only the last 30 frames
+std::array<SoundAccounting, 30> g_heard_sounds;
 
 bool play_sound_hook(IGame* game)
 {
@@ -34,8 +40,14 @@ bool play_sound_hook(IGame* game)
         return false;
 
     const auto frame = game->GetState().match.frame.get();
+    auto& accounting = g_heard_sounds[frame % g_heard_sounds.size()];
+    if (accounting.frame != frame)
+    {
+        accounting.frame = frame;
+        accounting.sounds.clear();
+    }
     const auto& sound_id = game->GetCurrentSound();
-    auto [_, success] = g_heard_sounds[frame].insert(sound_id);
+    auto [_, success] = accounting.sounds.insert(sound_id);
     if (success)
         return true;
 
