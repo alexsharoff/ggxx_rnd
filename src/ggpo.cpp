@@ -48,6 +48,7 @@ uint32_t g_timesync_frames = 0;
 bool g_status_displayed = false;
 bool g_ggpo_synchronized = false;
 bool g_ggpo_force_idle = true;
+IGame::input_t g_dropped_input = {};
 
 
 #pragma warning(push)
@@ -227,6 +228,7 @@ void prepare()
     g_manual_frame_advance_enabled_backup = g_cfg->get_manual_frame_advance_settings().enabled;
     g_cfg->get_manual_frame_advance_settings().enabled = false;
     g_ggpo_force_idle = true;
+    g_dropped_input = {};
 }
 
 void start_ggpo_synctest()
@@ -367,11 +369,15 @@ bool after_read_input(IGame* game)
         std::swap(input[0], input[1]);
 
     GGPOErrorCode result = GGPO_OK;
-    for (uint8_t side = 1; side <= 2; ++side)
     {
-        if (!g_network_enabled || network_args.side == side)
+        auto input_fixed = input;
+        input_fixed[network_args.side-1] |= g_dropped_input[network_args.side-1];
+        for (uint8_t side = 1; side <= 2; ++side)
         {
-            result = ggpo_add_local_input(g_session, g_player_handles[side-1], (void*)&input[side-1], 2);
+            if (!g_network_enabled || network_args.side == side)
+            {
+                result = ggpo_add_local_input(g_session, g_player_handles[side-1], (void*)&input_fixed[side-1], 2);
+            }
         }
     }
 
@@ -379,6 +385,7 @@ bool after_read_input(IGame* game)
     {
         GGPO_CHECK(result);
         int disconnected = 0;
+        g_dropped_input = {};
         GGPO_CHECK(ggpo_synchronize_input(g_session, (void*)&input, 4, &disconnected));
         if (disconnected)
             g_disconnected = true;
@@ -386,6 +393,11 @@ bool after_read_input(IGame* game)
     else
     {
         assert(g_network_enabled);
+        if (result == GGPO_ERRORCODE_PREDICTION_THRESHOLD)
+        {
+            // save input for later
+            g_dropped_input[network_args.side-1] |= input[network_args.side-1];
+        }
         input = {};
         // Keep redrawing, but don't update FPS timestamps
         game->DrawFrame(false);

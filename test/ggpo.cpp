@@ -205,11 +205,12 @@ public:
                     );
                 }
             }
-            if (GGPO_SUCCEEDED(result))
+            if (result != GGPO_ERRORCODE_NOT_SYNCHRONIZED && result != GGPO_ERRORCODE_PREDICTION_THRESHOLD)
             {
+                GGPO_CHECK(result);
                 int disconnect_flags;
                 std::array<input_t, 2> inputs;
-                result = ggpo_synchronize_input(m_session, &inputs, sizeof(inputs), &disconnect_flags);
+                GGPO_CHECK(ggpo_synchronize_input(m_session, &inputs, sizeof(inputs), &disconnect_flags));
                 if (GGPO_SUCCEEDED(result))
                 {
                     advance_frame(inputs, disconnect_flags);
