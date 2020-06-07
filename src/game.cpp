@@ -16,6 +16,7 @@ using memory_dump::dump_unprotected;
 using memory_dump::local_memory_accessor;
 
 int32_t play_sound_impl(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t, IXACT3Wave**);
+void gg_main_loop_impl();
 
 // hooks for game functions
 namespace
@@ -32,18 +33,7 @@ int32_t __stdcall play_sound(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_
 
 void gg_main_loop()
 {
-    if (!g_game->Idle())
-    {
-        g_game->ReadInput();
-        if (!g_game->IsCurrentFrameAborted())
-        {
-            g_game->AdvanceFrame();
-            g_game->DrawFrame();
-            g_game->ProcessAudio();
-            g_game->RunSteamCallbacks();
-            g_game->RestartIfRequested();
-        }
-    }
+    gg_main_loop_impl();
 }
 
 void get_input_from_cache(input_data* out)
@@ -678,8 +668,21 @@ public:
             m_callbacks[event].insert(m_callbacks[event].begin(), f);
     }
 
+    bool CheckDeviceLost()
+    {
+        // flag at 0x504F3C is set if Present() fails
+        bool& device_lost = *reinterpret_cast<bool*>(m_image_base + 0x504F3C);
+        if (device_lost)
+        {
+            if (!m_globals_orig.reset_directx_device())
+                device_lost = false;
+        }
+        return device_lost;
+    }
+
 private:
     friend int32_t play_sound_impl(IXACT3WaveBank*, int16_t, uint32_t, int32_t, int8_t, IXACT3Wave**);
+    friend void gg_main_loop_impl();
 
     gg_globals m_globals_orig;
     std::chrono::high_resolution_clock::time_point m_next_frame = std::chrono::high_resolution_clock::now();
@@ -754,6 +757,25 @@ int32_t play_sound_impl(IXACT3WaveBank* a1, int16_t a2, uint32_t a3, int32_t a4,
 
     const auto f = *game->m_globals_orig.play_sound_func.ptr;
     return f(a1, a2, a3, a4, a5, a6);
+}
+
+void gg_main_loop_impl()
+{
+    auto game = dynamic_cast<Game*>(g_game);
+    if (game->CheckDeviceLost())
+        return;
+    if (!g_game->Idle())
+    {
+        g_game->ReadInput();
+        if (!g_game->IsCurrentFrameAborted())
+        {
+            g_game->AdvanceFrame();
+            g_game->DrawFrame();
+            g_game->ProcessAudio();
+            g_game->RunSteamCallbacks();
+            g_game->RestartIfRequested();
+        }
+    }
 }
 
 std::shared_ptr<IGame> IGame::Initialize(size_t baseAddress, configuration* cfg)
