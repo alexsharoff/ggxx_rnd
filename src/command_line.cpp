@@ -296,11 +296,5 @@ libgg_args parse_command_line()
         }
     }
 
-    if (!cmd.replay.has_value())
-    {
-        const auto filename = std::to_wstring(time(0)) + std::to_wstring(::GetCurrentProcessId());
-        cmd.replay = { filename + L".ggr", libgg_args::replay_t::mode_t::record };
-    }
-
     return cmd;
 }
