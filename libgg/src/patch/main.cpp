@@ -31,13 +31,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     //wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDR_ICON));
 
     RegisterClass(&wc);
-    CreateWindowEx(
-        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+    auto hwnd = CreateWindowEx(
+        WS_EX_TOPMOST,
         wc.lpszClassName, wc.lpszClassName,
-        WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE,
+        WS_SYSMENU | WS_VISIBLE,
         CW_USEDEFAULT, CW_USEDEFAULT, 1, 1,
         0, 0, hInstance, 0
     );
+    SetWindowLong(hwnd, GWL_STYLE, GetWindowLong(hwnd, GWL_STYLE) & ~WS_MAXIMIZEBOX);
+    SetWindowLong(hwnd, GWL_STYLE, GetWindowLong(hwnd, GWL_STYLE) & ~WS_MINIMIZEBOX);
 
     g_hInstance = hInstance;
 
@@ -160,7 +162,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             childHwnd = CreateWindowW(
                 L"Button", L"Uninstall",
-                WS_VISIBLE | WS_CHILD ,
+                WS_VISIBLE | WS_CHILD,
                 100 + g_padding * 2, g_padding, 100, 40, hwnd,
                 (HMENU)ID_UNINSTALL, NULL, NULL
             );
