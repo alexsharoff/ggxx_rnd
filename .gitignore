@@ -1,3 +1,2 @@
-.build
-.vscode
-build
+# any file starting with a dot
+.*
