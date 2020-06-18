@@ -1,11 +1,6 @@
 @echo off
 
-set "script_dir=%~dp0"
-set "gg_path=%script_dir%\..\.build\gg.exe"
-if not exist "%gg_path%" (
-    >&2 echo %gg_path% does not exist
-    exit /b 1
-)
+call "%~dp0\_get_gg_path.bat" || exit /b 1
 
 set "replay_path=%1"
 if [%replay_path%] == [] (
