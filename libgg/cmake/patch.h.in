@@ -1,0 +1,7 @@
+#include <binary_patch.h>
+
+X64DbgPatch @VAR_NAME@ = {
+    "@FILENAME@",
+    {@REPLACEMENTS@
+    }
+};

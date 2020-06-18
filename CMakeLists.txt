@@ -1,83 +1,22 @@
 cmake_minimum_required(VERSION 3.15)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-
-project(libgg C CXX)
-
-# TODO: automate
-# Copy to build dir, run steamless, apply patches
-set(GGXXACPR_DIR "" CACHE PATH "")
-
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(FATAL_ERROR "Only 32-bit build is supported")
-endif()
+project(ggxxrnd)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Link static MSVCRT for all targets
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-
-add_compile_options($<$<NOT:$<CONFIG:Debug>>:/GL> /W4 /WX /Wv:18)
-add_link_options($<$<NOT:$<CONFIG:Debug>>:/LTCG>)
-
-add_subdirectory(ggpo)
 
 add_compile_definitions(
     NOMINMAX
     WIN32_LEAN_AND_MEAN
 )
-
-include_directories(include)
-
-add_library(libgg.static STATIC
-    src/patch_iat.cpp
-    src/fiber_mgmt.cpp
-)
-target_link_libraries(libgg.static PUBLIC dbghelp)
-
-add_library(libgg SHARED
-    src/game.cpp
-    src/game_state.cpp
-    src/game_state_debug.cpp
-    src/ggpo.cpp
-    src/libgg.cpp
-    src/patches.cpp
-    src/recorder.cpp
-    src/skip_intro.cpp
-    src/sound_fix.cpp
-    src/training_mode_ex.cpp
-    src/command_line.cpp
-    src/configuration.cpp
-    src/util.cpp
-    src/print_state.cpp
-    src/unattended.cpp
-)
-target_link_libraries(libgg GGPO libgg.static Shlwapi)
-target_compile_definitions(libgg PRIVATE $<$<CONFIG:Debug>:LIBGG_LOG_FILE>)
-
-add_subdirectory(src/steam_api_nop)
+# Enable whole program optimization, treat warnings as errors
+add_compile_options($<$<NOT:$<CONFIG:Debug>>:/GL> /W4 /WX)
+add_link_options($<$<NOT:$<CONFIG:Debug>>:/LTCG>)
+# Link static MSVCRT for all targets
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 enable_testing()
 
-add_executable(test_mini_reflection test/mini_reflection.cpp)
-add_executable(test_fiber_mgmt test/fiber_mgmt.cpp)
-target_link_libraries(test_fiber_mgmt libgg.static)
-add_executable(test_memory_dump test/memory_dump.cpp)
-add_executable(test_ggpo test/ggpo.cpp)
-target_link_libraries(test_ggpo GGPO Winmm Ws2_32)
-#add_executable(test_diff test/diff.cpp)
-#add_executable(test_binary_serializer test/binary_serializer.cpp)
-#add_executable(test_pretty_print test/pretty_print.cpp)
-
-add_executable(gg IMPORTED)
-set_target_properties(gg PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/gg.exe)
-
-include(test/gg.cmake)
-
-add_test(NAME mini_reflection COMMAND test_mini_reflection)
-add_test(NAME fiber_mgmt COMMAND test_fiber_mgmt)
-add_test(NAME memory_dump COMMAND test_memory_dump)
-#add_test(NAME diff COMMAND test_diff)
-#add_test(NAME binary_serializer COMMAND test_binary_serializer)
-#add_test(NAME pretty_print COMMAND test_pretty_print)
+add_subdirectory(thirdparty)
+add_subdirectory(libgg)
+add_subdirectory(ggxxacpr)
